@@ -1,0 +1,1118 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>산불 대응 의사결정 지원 시스템</title>
+<style>
+:root{
+  --bg:#f4f6f8;--panel:#fff;--line:#e5e7eb;--text:#111827;--muted:#6b7280;
+  --danger:#b91c1c;--danger-bg:#fee2e2;--warn:#b45309;--warn-bg:#fef3c7;
+  --info:#1d4ed8;--info-bg:#dbeafe;--ok:#166534;--ok-bg:#dcfce7;--dark:#111827;
+}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Pretendard","Noto Sans KR",sans-serif}
+button{font:inherit}
+header{height:64px;background:#0f172a;color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 22px;position:sticky;top:0;z-index:20}
+.brand{font-weight:800;font-size:17px}.meta{display:flex;gap:18px;font-size:12px;color:#cbd5e1}
+.app{display:grid;grid-template-columns:220px 1fr;min-height:calc(100vh - 64px)}
+aside{background:#fff;border-right:1px solid var(--line);padding:16px;position:sticky;top:64px;height:calc(100vh - 64px);overflow:auto}
+.scenario{padding:14px;border-radius:12px;background:#f8fafc;border:1px solid var(--line);margin-bottom:18px}.scenario h3{font-size:13px;margin:0 0 10px}.scenario p{font-size:12px;margin:5px 0;color:#374151}
+.navtitle{font-size:10px;font-weight:800;color:#9ca3af;margin:18px 8px 7px;text-transform:uppercase}.nav{width:100%;border:0;background:transparent;text-align:left;padding:10px;border-radius:9px;cursor:pointer;color:#374151}.nav.active,.nav:hover{background:#111827;color:#fff}
+main{padding:18px;min-width:0}.grid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(330px,.9fr);gap:16px}.card{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:0 1px 2px #00000008}.head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--line);gap:12px}.head h2{font-size:14px;margin:0}.body{padding:16px}.k{font-size:11px;color:var(--muted)}.v{font-size:22px;font-weight:800;margin-top:3px}.toolbar{display:flex;gap:7px;flex-wrap:wrap}.btn{border:1px solid var(--line);background:#fff;padding:8px 10px;border-radius:8px;cursor:pointer}.btn:hover{background:#f9fafb}.btn.primary{background:#111827;color:#fff;border-color:#111827}.btn.tiny{padding:6px 8px;font-size:11px}
+.badge{display:inline-flex;align-items:center;padding:5px 9px;border-radius:999px;font-size:11px;font-weight:800;white-space:nowrap}.danger{background:var(--danger-bg);color:#991b1b}.warn{background:var(--warn-bg);color:#92400e}.info{background:var(--info-bg);color:#1d4ed8}.ok{background:var(--ok-bg);color:#166534}.neutral{background:#f3f4f6;color:#374151}
+.alertbar{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px;padding:14px 16px;background:#fff7ed;border:1px solid #fed7aa;border-radius:14px}.alertbar h1{font-size:15px;margin:0 0 4px}.alertbar p{margin:0;color:#7c2d12;font-size:12px;line-height:1.5}.pulse{width:9px;height:9px;border-radius:50%;background:#dc2626;display:inline-block;margin-right:7px;box-shadow:0 0 0 5px #fecaca}
+.map{height:560px;background:linear-gradient(#eef2f3,#e5e7eb);position:relative;overflow:hidden}.map svg{width:100%;height:100%}.legend{position:absolute;left:14px;bottom:14px;background:#ffffffec;border:1px solid var(--line);border-radius:10px;padding:10px 11px;font-size:11px;display:grid;gap:7px}.lg{display:flex;align-items:center;gap:7px}.dot{width:11px;height:11px;border-radius:3px;display:inline-block}.layerbox{position:absolute;right:14px;top:14px;background:#ffffffef;border:1px solid var(--line);border-radius:10px;padding:10px;width:185px}.layerbox strong{font-size:11px}.layerbox label{display:flex;gap:7px;font-size:11px;margin-top:8px;color:#374151;align-items:center}
+.summary{display:grid;gap:10px}.stage{padding:12px;border-radius:10px;background:#f8fafc;font-size:12px;line-height:1.55}.stage b{display:block;margin-bottom:4px}.metrics{display:grid;grid-template-columns:1fr 1fr;gap:10px}.metric{border:1px solid var(--line);border-radius:10px;padding:11px}.autobox{border:1px solid #bfdbfe;background:#eff6ff;border-radius:12px;padding:13px}.autobox h3{font-size:12px;margin:0 0 7px;color:#1e3a8a}.autobox p{font-size:12px;line-height:1.5;margin:0;color:#1e40af}.auto-label{display:flex;align-items:center;gap:7px;font-size:11px;color:#1d4ed8;font-weight:800;margin-bottom:10px}.spark{font-size:15px}
+.section{margin-top:16px}.tabs{display:flex;gap:7px;padding:12px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}.tab{border:0;border-radius:999px;padding:8px 11px;background:#f3f4f6;cursor:pointer;font-size:12px}.tab.active{background:#111827;color:#fff}.list{display:flex;flex-direction:column;gap:10px}.decision{border:1px solid var(--line);border-radius:12px;padding:14px}.dtop{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.decision h3{font-size:14px;margin:0}.decision p{font-size:13px;line-height:1.55;margin:8px 0 0}.small{margin-top:10px;font-size:11px;color:var(--muted);display:flex;gap:8px;flex-wrap:wrap}.chipbtn{border:1px solid var(--line);background:#fff;border-radius:999px;padding:6px 9px;font-size:11px;cursor:pointer}.chipbtn:hover{background:#f9fafb}.decision.urgent{border-left:4px solid #dc2626}.decision.high{border-left:4px solid #f59e0b}
+.bottom{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}.timeline{display:flex;gap:8px;flex-wrap:wrap}.step{padding:9px 10px;border:1px solid var(--line);border-radius:9px;font-size:12px}.step.now{background:#fef2f2;border-color:#dc2626;color:#991b1b;font-weight:700}table{width:100%;border-collapse:collapse;font-size:12px}th,td{padding:9px 8px;border-bottom:1px solid var(--line);text-align:left}th{color:var(--muted)}
+.quick{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.quick button{border:1px solid var(--line);background:#fff;border-radius:10px;padding:10px;text-align:left;cursor:pointer;font-size:11px}.quick button b{display:block;margin-bottom:4px;font-size:12px}.quick button:hover{background:#f8fafc}.note{font-size:11px;color:var(--muted);margin-top:9px;line-height:1.45}
+.drawer{position:fixed;right:-460px;top:64px;width:460px;height:calc(100vh - 64px);background:#fff;border-left:1px solid var(--line);box-shadow:-8px 0 20px #0002;transition:.2s;padding:18px;overflow:auto;z-index:30}.drawer.open{right:0}.drawer h3{margin-top:0}.drawer .result{padding:12px;border-radius:10px;background:#f8fafc;border:1px solid var(--line);font-size:13px;line-height:1.65}.drawer .source{font-size:11px;color:var(--muted);margin-top:10px}.drawer .notice{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;border-radius:10px;padding:10px;font-size:11px;line-height:1.5;margin-bottom:12px}
+
+/* v4: 확산 예측 지도 레이어 패널 */
+.map{height:650px;background:#e7ecef;position:relative;overflow:hidden}
+.map-topbar{position:absolute;left:14px;top:14px;z-index:5;display:flex;gap:7px;align-items:center;background:#ffffffef;border:1px solid var(--line);border-radius:10px;padding:7px;box-shadow:0 2px 8px #00000012}
+.map-topbar{flex-wrap:wrap;max-width:520px}.map-topbar .time-label{font-size:10px;font-weight:800;color:#7f1d1d;padding:0 4px}.map-topbar .timebtn{border:1px solid var(--line);background:#fff;border-radius:7px;padding:6px 9px;font-size:11px;cursor:pointer;display:inline-flex;align-items:center;gap:5px}.map-topbar .timebtn::before{content:'✓';width:13px;height:13px;border:1px solid #cbd5e1;border-radius:3px;display:inline-flex;align-items:center;justify-content:center;font-size:9px;color:transparent;background:#fff}.map-topbar .timebtn.active{background:#fff7ed;color:#991b1b;border-color:#fca5a5;font-weight:800}.map-topbar .timebtn.active::before{background:#991b1b;border-color:#991b1b;color:#fff}
+.layerpanel{position:absolute;right:14px;top:14px;bottom:14px;z-index:6;width:255px;background:#fffffff2;border:1px solid #cbd5e1;border-radius:12px;box-shadow:0 6px 18px #0000001a;overflow:hidden;display:flex;flex-direction:column}
+.layerpanel-head{padding:11px 12px;border-bottom:1px solid var(--line);background:#f8fafc}.layerpanel-head strong{display:block;font-size:12px}.layerpanel-head span{display:block;font-size:10px;color:var(--muted);margin-top:3px;line-height:1.4}
+.layerpanel-scroll{overflow:auto;padding:8px 9px 12px}.layer-group{border:1px solid #e5e7eb;border-radius:9px;margin-top:8px;overflow:hidden;background:#fff}.layer-group:first-child{margin-top:0}.layer-title{display:flex;align-items:center;justify-content:space-between;padding:8px 9px;background:#f8fafc;font-size:11px;font-weight:800}.priority-tag{font-size:9px;padding:3px 5px;border-radius:999px;background:#f3f4f6;color:#4b5563}.priority-tag.p1{background:#fee2e2;color:#991b1b}.priority-tag.p2{background:#ffedd5;color:#9a3412}.priority-tag.p3{background:#fef3c7;color:#92400e}.priority-tag.p4{background:#dcfce7;color:#166534}
+.layer-options{padding:6px 9px 8px}.layer-options label{display:flex;align-items:center;gap:7px;font-size:10.5px;color:#374151;padding:4px 0;cursor:pointer}.layer-options input{accent-color:#b91c1c}.swatch{width:11px;height:11px;border-radius:2px;display:inline-block;flex:none}.swatch.line{height:3px;border-radius:999px}.swatch.dot{border-radius:50%}
+.map-legend{position:absolute;left:14px;bottom:14px;z-index:5;background:#fffffff0;border:1px solid var(--line);border-radius:10px;padding:9px 10px;font-size:10px;display:flex;gap:12px;flex-wrap:wrap;max-width:560px;box-shadow:0 2px 8px #00000010}.map-legend .lg{display:flex;align-items:center;gap:5px}
+.map-info{position:absolute;left:14px;top:62px;z-index:5;background:#0f172ae8;color:#fff;border-radius:10px;padding:9px 11px;font-size:10.5px;line-height:1.5;max-width:330px}.map-info b{font-size:11px}.map-info .dim{color:#cbd5e1}
+.fire-marker{position:absolute;left:486px;top:362px;z-index:7;width:34px;height:34px;border:0;border-radius:50%;background:#dc2626;color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;box-shadow:0 4px 14px #00000033,0 0 0 6px #fecaca;transform:translate(-50%,-50%)}
+.fire-marker:hover{transform:translate(-50%,-50%) scale(1.04)}
+.fire-popup{position:absolute;left:298px;top:108px;z-index:8;width:355px;background:#fffffffb;border:1px solid #cbd5e1;border-radius:14px;box-shadow:0 12px 30px #00000022;overflow:hidden}.fire-popup.hidden{display:none}.fire-popup-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:12px 14px;background:#fff7ed;border-bottom:1px solid #fed7aa}.fire-popup-title strong{display:block;font-size:13px;color:#9a3412}.fire-popup-title span{display:block;font-size:11px;color:#7c2d12;margin-top:3px}.fire-popup-close{border:0;background:transparent;font-size:20px;line-height:1;cursor:pointer;color:#7c2d12;padding:0 2px}.fire-popup-body{padding:12px 14px 14px}.fire-popup-grid{display:grid;grid-template-columns:112px 1fr;gap:7px 10px;font-size:11px;line-height:1.45}.fire-popup-grid .label{color:#6b7280;font-weight:700}.fire-popup-grid .value{color:#111827}.fire-popup-foot{margin-top:12px;padding-top:10px;border-top:1px dashed #d1d5db;font-size:10.5px;color:#6b7280;line-height:1.5}.fire-popup-badge{display:inline-flex;align-items:center;padding:4px 8px;border-radius:999px;font-size:10px;font-weight:800;background:#fee2e2;color:#991b1b;margin-top:6px}
+.layer-note{padding:8px 9px;background:#fff7ed;border-top:1px solid #fed7aa;font-size:9.5px;line-height:1.45;color:#9a3412}
+.map svg .layer{transition:opacity .16s ease}.map svg .hidden-layer{display:none}
+
+
+/* v6: 지도 중심 레이아웃 */
+.app{display:block;min-height:calc(100vh - 64px)}
+main{padding:18px;min-width:0;max-width:1600px;margin:0 auto}
+.grid{display:block}
+.category-strip{margin-top:16px}
+.category-strip .body{padding:12px 16px}
+.catbar{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px}
+.catbtn{border:1px solid var(--line);background:#fff;padding:9px 10px;border-radius:9px;cursor:pointer;font-size:11px;text-align:left;line-height:1.35;min-height:52px}.catbtn b{display:block;font-size:10px;color:#6b7280;margin-bottom:3px}.catbtn.active{background:#111827;color:#fff;border-color:#111827}.catbtn.active b{color:#cbd5e1}.catbtn:hover{background:#f8fafc}.catbtn.active:hover{background:#111827}.detail-section.hidden{display:none}
+.priority-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.priority-item{border:1px solid var(--line);border-radius:11px;padding:12px;background:#fff;cursor:pointer;transition:.16s}.priority-item:hover{border-color:#94a3b8;box-shadow:0 4px 12px #00000010;transform:translateY(-1px)}.priority-item .rank{font-size:10px;font-weight:800;color:#991b1b;margin-bottom:5px}.priority-item h3{font-size:12px;margin:0 0 6px}.priority-item p{font-size:11px;line-height:1.5;color:#4b5563;margin:0}.priority-item .jump{margin-top:8px;font-size:10px;color:#1d4ed8;font-weight:800}.priority-criteria{margin:10px 0 2px;padding:10px 12px;background:#f8fafc;border:1px solid var(--line);border-radius:10px;font-size:11px;line-height:1.55;color:#4b5563}.priority-criteria b{color:#111827}.count-badge{margin-left:auto;min-width:20px;height:18px;padding:0 6px;border-radius:999px;background:#fee2e2;color:#991b1b;font-size:9px;font-weight:800;display:inline-flex;align-items:center;justify-content:center}.category-detail{border:1px solid var(--line);border-radius:12px;padding:14px;background:#fff}.category-detail-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.category-detail h3{font-size:15px;margin:0}.detail-grid{display:grid;grid-template-columns:120px 1fr;gap:8px 12px;margin-top:14px;font-size:12px;line-height:1.55}.detail-grid .dl{font-weight:800;color:#6b7280}.detail-grid .dv{color:#111827}.detail-note{margin-top:12px;padding:10px 12px;background:#f8fafc;border-radius:10px;font-size:11px;color:#4b5563;line-height:1.5}
+
+@media(max-width:1100px){.grid,.bottom{grid-template-columns:1fr}.quick{grid-template-columns:1fr 1fr}.map{height:470px}.catbar{grid-template-columns:repeat(2,minmax(0,1fr))}.priority-summary{grid-template-columns:1fr}}
+
+/* v11: 지도 + 대응 제안 */
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;align-items:stretch}
+.response-panel{min-width:0;display:flex;flex-direction:column}
+.response-panel .body{padding:0;display:flex;flex-direction:column;min-height:650px}
+.response-tabs{display:grid;grid-template-columns:repeat(3,1fr);border-bottom:1px solid var(--line)}
+.response-tab{border:0;border-right:1px solid var(--line);background:#f8fafc;padding:11px 6px;font-size:12px;font-weight:800;color:#6b7280;cursor:pointer}
+.response-tab:last-child{border-right:0}
+.response-tab.active{background:#111827;color:#fff}
+.response-content{padding:14px;overflow:auto;flex:1}
+.response-pane{display:none}
+.response-pane.active{display:block}
+.response-summary{font-size:12px;line-height:1.75;color:#374151;background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:12px}
+.response-summary b{color:#111827}
+.response-list{display:flex;flex-direction:column;gap:7px}
+.response-item{width:100%;border:1px solid var(--line);background:#fff;border-radius:9px;padding:10px 11px;text-align:left;cursor:pointer}
+.response-item:hover{background:#f8fafc;border-color:#cbd5e1}
+.response-item b{display:block;font-size:11px;margin-bottom:3px;color:#111827}
+.response-item span{font-size:10.5px;line-height:1.4;color:#6b7280}
+.response-note{font-size:10px;color:#9ca3af;line-height:1.5;margin-top:10px}
+.layerpanel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.layerpanel-head-copy{min-width:0}
+.layerpanel-toggle{width:26px;height:26px;border:1px solid var(--line);background:#fff;border-radius:7px;cursor:pointer;font-size:17px;line-height:1;color:#475569;flex:none}
+.layerpanel.minimized{bottom:auto;height:auto;width:150px}
+.layerpanel.minimized .layerpanel-scroll{display:none}
+.layerpanel.minimized .layerpanel-head span{display:none}
+.fire-popup-head{cursor:move;user-select:none;touch-action:none}
+.fire-popup-close{cursor:pointer}
+@media(max-width:1100px){
+  .grid{grid-template-columns:1fr}
+  .response-panel .body{min-height:auto}
+}
+
+
+.response-category-list{margin-bottom:12px}
+.response-item.active{background:#eff6ff;border-color:#93c5fd}
+.response-detail:empty{display:none}
+.response-detail{border-top:1px solid var(--line);padding-top:12px;margin-top:4px}
+.response-detail-card{border:1px solid var(--line);border-radius:10px;background:#fff;overflow:hidden}
+.response-detail-title{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;padding:10px 11px;background:#f8fafc;border-bottom:1px solid var(--line)}
+.response-detail-title b{font-size:12px;line-height:1.4}
+.response-detail-grid{display:grid;grid-template-columns:72px 1fr;gap:7px 8px;padding:11px;font-size:10.5px;line-height:1.5}
+.response-detail-grid .label{font-weight:800;color:#6b7280}
+.response-detail-grid .value{color:#111827}
+.response-content{scrollbar-width:thin}
+
+
+/* v13: 확산 예측 ↔ 대응 제안 연동 */
+.map-topbar .prediction-action::before{display:none}
+.map-topbar .prediction-action{font-weight:800;color:#374151}
+.map-topbar .prediction-action.playing{background:#111827;color:#fff;border-color:#111827}
+.prediction-linked-summary{margin-top:10px;display:grid;gap:9px}
+.prediction-current{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 10px;border:1px solid #bfdbfe;background:#eff6ff;border-radius:9px;font-size:10.5px;color:#1e40af}
+.prediction-current b{font-size:11px;color:#1e3a8a;text-align:right}
+.prediction-priority,.prediction-change{border:1px solid var(--line);border-radius:9px;padding:10px;background:#fff}
+.prediction-mini-title{font-size:10px;font-weight:800;color:#6b7280;margin-bottom:7px}
+.prediction-priority ol{margin:0;padding-left:19px;display:grid;gap:6px}
+.prediction-priority li{font-size:10.5px;line-height:1.45;color:#374151}
+.prediction-priority li b{color:#991b1b}
+.prediction-change{background:#fff7ed;border-color:#fed7aa}
+.prediction-change p{margin:0;font-size:10.5px;line-height:1.55;color:#9a3412}
+
+
+/* v14: 실제 MapLibre GL JS 지도 + 유관기관 */
+.map{position:relative;height:650px;background:#e5e7eb;overflow:hidden}
+#realMap{position:absolute;inset:0;z-index:1}
+.map-topbar,.map-info,.layerpanel,.map-legend,.fire-popup,.map-zoom-control{z-index:8}
+.fire-marker{display:none} /* 실제 발화점은 MapLibre marker로 표시 */
+.maplibregl-ctrl-bottom-left,.maplibregl-ctrl-bottom-right{display:none}
+.maplibregl-popup-content{padding:0;border-radius:12px;overflow:hidden;box-shadow:0 8px 24px #00000026}
+.maplibregl-popup-close-button{font-size:18px;padding:4px 8px;color:#475569}
+.agency-marker,.fire-map-marker{border:0;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 12px #0003}
+.fire-map-marker{width:38px;height:38px;border-radius:50%;background:#dc2626;color:#fff;font-size:20px;border:3px solid #fff}
+.agency-marker{width:30px;height:30px;border-radius:9px;color:#fff;font-size:15px;border:2px solid #fff}
+.agency-marker.fire{background:#dc2626}
+.agency-marker.police{background:#1d4ed8}
+.agency-marker.gov{background:#0f766e}
+.agency-marker.forest{background:#166534}
+.agency-popup{min-width:255px;background:#fff}
+.agency-popup-head{padding:10px 12px;background:#f8fafc;border-bottom:1px solid #e5e7eb}
+.agency-popup-head b{display:block;font-size:12px}
+.agency-popup-head span{display:block;font-size:10px;color:#6b7280;margin-top:3px}
+.agency-popup-body{padding:10px 12px;font-size:10.5px;line-height:1.55}
+.agency-resource-grid{display:grid;grid-template-columns:86px 1fr;gap:5px 8px;margin-top:7px}
+.agency-resource-grid .label{font-weight:800;color:#6b7280}
+.agency-demo-note{margin-top:8px;padding-top:7px;border-top:1px dashed #d1d5db;color:#9a3412;font-size:9.5px}
+.map-zoom-control{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);display:flex;align-items:center;gap:6px;background:#ffffffed;border:1px solid #cbd5e1;border-radius:12px;padding:6px;box-shadow:0 4px 14px #0002}
+.map-zoom-control button{width:34px;height:30px;border:1px solid var(--line);background:#fff;border-radius:8px;cursor:pointer;font-size:17px;font-weight:800;color:#334155}
+.map-zoom-control button:hover{background:#f8fafc}
+.map-zoom-control .zoom-label{font-size:10px;color:#64748b;padding:0 5px;white-space:nowrap}
+.layer-options label .count-badge{margin-left:auto}
+
+
+/* v16: MapLibre 없이 기존 SVG 지도 사용 */
+#realMap{display:none}
+.static-map-viewport{
+  position:absolute;inset:0;z-index:1;overflow:hidden;
+  background:#eef2f3;cursor:grab;touch-action:none;
+}
+.static-map-viewport.dragging{cursor:grabbing}
+.static-map-stage{
+  position:absolute;inset:0;transform-origin:center center;
+  will-change:transform;
+}
+.static-map-stage>svg{position:absolute;inset:0;width:100%;height:100%}
+.agency-marker-layer{position:absolute;inset:0;pointer-events:none}
+.agency-marker-layer .agency-marker{position:absolute;transform:translate(-50%,-50%);pointer-events:auto}
+.static-fire-marker{
+  position:absolute;left:49.2%;top:58.8%;transform:translate(-50%,-50%);
+  pointer-events:auto;
+}
+.maplibregl-popup-content,.maplibregl-popup-close-button,
+.maplibregl-ctrl-bottom-left,.maplibregl-ctrl-bottom-right{display:none!important}
+.static-agency-popup{
+  position:absolute;z-index:12;width:285px;background:#fff;
+  border:1px solid #cbd5e1;border-radius:12px;box-shadow:0 8px 24px #00000026;
+  overflow:hidden;transform:translate(12px,-50%);
+}
+.static-agency-popup .close-agency{
+  position:absolute;right:6px;top:4px;border:0;background:transparent;
+  font-size:18px;color:#64748b;cursor:pointer;z-index:2;
+}
+
+
+/* v17: AI 어시스턴트 플로팅 버튼 */
+.ai-fab{
+  position:fixed;right:22px;bottom:22px;z-index:50;
+  border:0;border-radius:999px;background:#111827;color:#fff;
+  padding:12px 16px;font-size:12px;font-weight:800;cursor:pointer;
+  box-shadow:0 10px 28px #00000035;display:flex;align-items:center;gap:7px;
+}
+.ai-fab:hover{background:#1f2937}
+.ai-chat{
+  position:fixed;right:22px;bottom:78px;z-index:51;
+  width:330px;max-height:520px;background:#fff;border:1px solid #cbd5e1;
+  border-radius:14px;box-shadow:0 14px 38px #00000030;overflow:hidden;
+  display:none;
+}
+.ai-chat.open{display:block}
+.ai-chat-head{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding:11px 12px;background:#111827;color:#fff;
+}
+.ai-chat-head b{font-size:12px}
+.ai-chat-head span{display:block;margin-top:2px;font-size:9px;color:#cbd5e1}
+.ai-chat-head button{border:0;background:transparent;color:#fff;font-size:18px;cursor:pointer}
+.ai-chat-body{padding:11px;max-height:330px;overflow:auto;background:#f8fafc}
+.ai-msg{max-width:90%;padding:8px 10px;border-radius:10px;margin-bottom:8px;font-size:10.5px;line-height:1.55}
+.ai-msg.bot{background:#fff;border:1px solid #e5e7eb;color:#374151}
+.ai-msg.user{margin-left:auto;background:#dbeafe;color:#1e3a8a}
+.ai-quick{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.ai-quick button{border:1px solid #cbd5e1;background:#fff;border-radius:999px;padding:6px 8px;font-size:9.5px;cursor:pointer}
+.ai-chat-input{display:flex;gap:6px;padding:10px;border-top:1px solid #e5e7eb;background:#fff}
+.ai-chat-input input{flex:1;border:1px solid #cbd5e1;border-radius:8px;padding:8px 9px;font-size:10px;outline:none}
+.ai-chat-input button{border:0;background:#111827;color:#fff;border-radius:8px;padding:0 11px;font-size:10px;font-weight:800;cursor:pointer}
+
+
+/* v18: 확산 예측 컨트롤 가림 현상 수정 */
+.map-topbar{
+  z-index:20 !important;
+  max-width:760px !important;
+}
+.map-info{
+  top:96px !important;
+}
+
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">산불 대응 의사결정 지원 시스템</div>
+  <div class="meta"><span>2026-09-26 13:00</span><span>상황실·통합지휘본부용</span><span>시나리오 WF-01</span></div>
+</header>
+<div class="app">
+<main>
+  <div class="alertbar">
+    <div>
+      <h1><span class="pulse"></span>시스템이 현재 상황에서 필요한 대응을 자동으로 제시했습니다.</h1>
+      <p>사용자의 추가 질문 없이 확산 예측·위험지역·기관별 우선 임무·근거를 한 화면에서 확인합니다.</p>
+    </div>
+    <span class="badge warn">격상 검토</span>
+  </div>
+
+  <div class="grid">
+
+    <section class="card">
+      <div class="head">
+        <div>
+          <h2>확산 예측 지도</h2>
+          <div class="k" style="margin-top:4px">확산 결과 위에 기상·지형/연료·인명·도로·보호대상을 레이어로 중첩</div>
+        </div>
+        <span class="badge info">레이어 기반 상황판</span>
+      </div>
+      <div class="map">
+        
+        <div id="staticMapViewport" class="static-map-viewport" aria-label="의성 산불 정적 지도">
+          <div id="staticMapStage" class="static-map-stage">
+            <svg viewBox="0 0 1000 650" aria-label="산불 확산 예측 지도 레이어 예시">
+          <!-- Base map -->
+          <rect width="1000" height="650" fill="#eef2f3"/>
+          <path d="M0 520 C110 480 165 520 250 460 S420 390 510 425 S690 455 790 390 S920 330 1000 350 L1000 650 L0 650Z" fill="#dde4df"/>
+          <path d="M40 140 C140 95 230 120 295 180 S430 240 510 185 S665 80 760 120 S915 175 1000 135 L1000 0 L0 0Z" fill="#e5eadf"/>
+          <g id="layer-contours" class="layer" opacity=".55">
+            <path d="M20 490 C120 430 200 470 300 390 S510 360 640 310 S820 290 960 220" fill="none" stroke="#a8b0b6" stroke-width="1.2"/>
+            <path d="M0 455 C125 390 240 425 330 350 S535 315 670 260 S850 250 1000 180" fill="none" stroke="#a8b0b6" stroke-width="1.2"/>
+            <path d="M40 420 C170 355 280 390 375 315 S565 275 705 225 S865 205 980 145" fill="none" stroke="#a8b0b6" stroke-width="1.2"/>
+          </g>
+
+          <!-- Terrain / fuel -->
+          <g id="layer-slope" class="layer" opacity=".28">
+            <path d="M155 235 L360 120 L485 245 L300 360Z" fill="#8b5e3c"/>
+            <path d="M520 160 L760 80 L835 250 L615 320Z" fill="#a06a42"/>
+          </g>
+          <g id="layer-fuel" class="layer">
+            <path d="M70 210 C145 145 230 150 310 205 S410 300 360 365 S205 405 120 350 S35 275 70 210Z" fill="#4f8b3a" opacity=".75"/>
+            <path d="M535 120 C625 60 765 75 825 165 S820 330 710 370 S525 330 490 245 S485 160 535 120Z" fill="#3f7d32" opacity=".78"/>
+            <path d="M680 400 C755 360 865 380 920 445 S955 560 875 600 S720 610 650 545 S620 440 680 400Z" fill="#5d9646" opacity=".72"/>
+          </g>
+          <g id="layer-canopy" class="layer" opacity=".42">
+            <circle cx="220" cy="245" r="56" fill="#1f6b35"/><circle cx="650" cy="205" r="70" fill="#1f6b35"/><circle cx="805" cy="485" r="58" fill="#1f6b35"/>
+          </g>
+
+          <!-- Roads / access -->
+          <g id="layer-roads" class="layer">
+            <path d="M0 470 C150 430 265 455 380 390 S585 345 720 300 S875 245 1000 205" fill="none" stroke="#ffffff" stroke-width="14"/>
+            <path d="M0 470 C150 430 265 455 380 390 S585 345 720 300 S875 245 1000 205" fill="none" stroke="#6b7280" stroke-width="5"/>
+            <path d="M160 650 C205 560 290 505 350 445 S470 305 520 235" fill="none" stroke="#ffffff" stroke-width="10"/>
+            <path d="M160 650 C205 560 290 505 350 445 S470 305 520 235" fill="none" stroke="#94a3b8" stroke-width="3"/>
+          </g>
+          <g id="layer-forestroad" class="layer">
+            <path d="M145 385 C215 340 255 320 320 305 S450 265 500 210" fill="none" stroke="#7c5c3b" stroke-width="3" stroke-dasharray="7 6"/>
+            <path d="M600 385 C650 350 710 340 765 310" fill="none" stroke="#7c5c3b" stroke-width="3" stroke-dasharray="7 6"/>
+          </g>
+          <g id="layer-evacroute" class="layer">
+            <path d="M645 275 C725 300 820 280 920 235" fill="none" stroke="#2563eb" stroke-width="6" stroke-dasharray="12 6"/>
+            <polygon points="915,226 938,234 920,248" fill="#2563eb"/>
+          </g>
+          <g id="layer-fireaccess" class="layer">
+            <path d="M110 540 C215 500 315 455 420 390" fill="none" stroke="#f59e0b" stroke-width="5" stroke-dasharray="10 6"/>
+          </g>
+
+          <!-- Population / villages -->
+          <g id="layer-villages" class="layer">
+            <path d="M585 210 L735 185 L800 280 L700 350 L575 310Z" fill="#fde68a" opacity=".34" stroke="#d97706" stroke-width="2" stroke-dasharray="6 4"/>
+            <text x="675" y="260" text-anchor="middle" font-size="13" font-weight="700" fill="#92400e">괴산리</text>
+            <path d="M775 335 L925 320 L965 435 L850 480 L760 420Z" fill="#fde68a" opacity=".26" stroke="#d97706" stroke-width="2" stroke-dasharray="6 4"/>
+            <text x="860" y="385" text-anchor="middle" font-size="13" font-weight="700" fill="#92400e">신월리</text>
+          </g>
+          <g id="layer-population" class="layer" opacity=".68">
+            <circle cx="670" cy="260" r="34" fill="#ef4444" opacity=".36"/><circle cx="670" cy="260" r="18" fill="#ef4444" opacity=".5"/>
+            <circle cx="855" cy="385" r="25" fill="#f97316" opacity=".36"/><circle cx="855" cy="385" r="12" fill="#f97316" opacity=".5"/>
+          </g>
+          <g id="layer-vulnerable" class="layer">
+            <circle cx="705" cy="230" r="8" fill="#be123c" stroke="#fff" stroke-width="2"/><text x="717" y="234" font-size="10" fill="#881337">요양시설</text>
+            <circle cx="830" cy="405" r="8" fill="#be123c" stroke="#fff" stroke-width="2"/><text x="842" y="409" font-size="10" fill="#881337">병원</text>
+          </g>
+          <g id="layer-shelter" class="layer">
+            <rect x="908" y="205" width="16" height="16" rx="3" fill="#2563eb" stroke="#fff" stroke-width="2"/><text x="930" y="217" font-size="10" fill="#1e3a8a">대피소</text>
+          </g>
+          <g id="layer-houses" class="layer">
+            <g fill="#8b5cf6" stroke="#fff" stroke-width="1"><circle cx="630" cy="280" r="4"/><circle cx="645" cy="293" r="4"/><circle cx="663" cy="300" r="4"/><circle cx="690" cy="290" r="4"/><circle cx="714" cy="304" r="4"/><circle cx="832" cy="365" r="4"/><circle cx="848" cy="375" r="4"/><circle cx="870" cy="390" r="4"/></g>
+          </g>
+
+          <!-- National infrastructure -->
+          <g id="layer-national" class="layer">
+            <rect x="520" y="105" width="18" height="18" rx="2" fill="#0f172a"/><text x="544" y="118" font-size="10" fill="#0f172a">변전소</text>
+            <path d="M528 125 C555 180 585 220 620 255" fill="none" stroke="#0f172a" stroke-width="3" stroke-dasharray="4 4"/>
+            <polygon points="470,95 480,113 460,113" fill="#334155"/><text x="487" y="108" font-size="10" fill="#334155">국가기간시설</text>
+          </g>
+          <g id="layer-military" class="layer">
+            <rect x="335" y="140" width="17" height="17" transform="rotate(45 343.5 148.5)" fill="#475569"/><text x="360" y="153" font-size="10" fill="#475569">군사시설</text>
+          </g>
+
+          <!-- Cultural heritage / forest resources -->
+          <g id="layer-cultural" class="layer">
+            <polygon points="575,330 581,344 596,345 584,355 588,370 575,362 562,370 566,355 554,345 569,344" fill="#f59e0b" stroke="#92400e" stroke-width="1.5"/><text x="603" y="354" font-size="10" fill="#92400e">국가유산</text>
+          </g>
+          <g id="layer-protectedforest" class="layer">
+            <path d="M80 180 C155 115 265 125 350 185 S440 320 390 390" fill="none" stroke="#166534" stroke-width="4" stroke-dasharray="12 7"/>
+            <text x="155" y="155" font-size="10" fill="#166534">산림보호구역</text>
+          </g>
+
+          <!-- Weather -->
+          <g id="layer-wind" class="layer">
+            <g stroke="#0ea5e9" stroke-width="4" fill="#0ea5e9"><line x1="170" y1="95" x2="240" y2="135"/><polygon points="240,135 224,134 232,120"/><line x1="415" y1="75" x2="485" y2="115"/><polygon points="485,115 469,114 477,100"/><line x1="690" y1="75" x2="760" y2="115"/><polygon points="760,115 744,114 752,100"/></g>
+            <text x="170" y="82" font-size="11" fill="#0369a1">북서풍 6 m/s</text>
+          </g>
+          <g id="layer-weatherstation" class="layer">
+            <circle cx="258" cy="90" r="7" fill="#0284c7" stroke="#fff" stroke-width="2"/><text x="270" y="94" font-size="10" fill="#075985">AWS</text>
+          </g>
+          <g id="layer-moisture" class="layer" opacity=".30">
+            <rect x="75" y="390" width="120" height="70" rx="16" fill="#38bdf8"/><text x="135" y="430" text-anchor="middle" font-size="11" fill="#075985">연료수분 낮음</text>
+          </g>
+
+          <!-- Fire spread forecast always on top -->
+          <g id="layer-p8" class="layer">
+            <path d="M255 510 C190 410 215 255 350 170 C485 85 685 120 785 265 C875 395 805 555 640 610 C500 655 335 620 255 510Z" fill="#f97316" opacity=".10" stroke="#f97316" stroke-width="3" stroke-dasharray="10 7"/>
+          </g>
+          <g id="layer-p5" class="layer">
+            <path d="M315 480 C265 395 286 275 390 210 C498 145 645 172 715 282 C780 385 720 510 590 550 C475 585 365 555 315 480Z" fill="#ef4444" opacity=".17" stroke="#dc2626" stroke-width="3"/>
+          </g>
+          <g id="layer-p3" class="layer">
+            <path d="M360 445 C328 382 348 302 420 263 C493 223 585 245 625 318 C662 385 623 458 545 485 C468 511 390 493 360 445Z" fill="#f97316" opacity=".28" stroke="#ea580c" stroke-width="3"/>
+          </g>
+          <g id="layer-p1" class="layer">
+            <path d="M407 415 C386 375 399 330 448 305 C498 279 558 299 580 345 C603 390 575 434 524 453 C476 470 427 455 407 415Z" fill="#facc15" opacity=".43" stroke="#ca8a04" stroke-width="3"/>
+          </g>
+          <g id="layer-f0" class="layer">
+            <path d="M445 410 C430 382 440 350 472 334 C505 319 541 332 553 360 C566 389 548 416 517 429 C487 442 458 433 445 410Z" fill="#7f1d1d" opacity=".5" stroke="#7f1d1d" stroke-width="4"/>
+            <circle cx="492" cy="382" r="6" fill="#450a0a"/><text x="505" y="385" font-size="10" font-weight="700" fill="#450a0a">현재 화선 F0</text>
+          </g>
+        </svg>
+            <div id="agencyMarkerLayer" class="agency-marker-layer"></div>
+            <button id="staticFireMarker" class="fire-map-marker static-fire-marker" title="산불 발생 정보">🔥</button>
+          </div>
+        </div>
+
+
+        <div class="map-topbar">
+          <span class="time-label">🔥 확산 예측 시점</span>
+          <button class="timebtn active" data-spread="layer-f0" onclick="toggleSpread('layer-f0',this)">현재 F0</button>
+          <button class="timebtn active" data-spread="layer-p1" onclick="toggleSpread('layer-p1',this)">+1h</button>
+          <button class="timebtn active" data-spread="layer-p3" onclick="toggleSpread('layer-p3',this)">+3h</button>
+          <button class="timebtn active" data-spread="layer-p5" onclick="toggleSpread('layer-p5',this)">+5h P5</button>
+          <button class="timebtn" data-spread="layer-p8" onclick="toggleSpread('layer-p8',this)">+8h P8</button>
+          <button class="timebtn prediction-action" id="playSpreadBtn" onclick="playSpreadTimeline()">▶ 재생</button>
+          <button class="timebtn prediction-action" onclick="showAllSpread()">전체 보기</button>
+        </div>
+
+        <div class="map-info"><b>의성 안평면 괴산리 산불</b><br><span class="dim">2025-03-22 14:30 기준 · 발화지 괴산리 산61</span><br>산불 대응 3단계 · 진화율 30% · 현장 풍속 약 4.9 m/s</div>
+
+        <button class="fire-marker" id="fireMarker" onclick="openFirePopup()" title="산불 발생 지점 정보 보기">🔥</button>
+        <div class="fire-popup" id="firePopup">
+          <div class="fire-popup-head">
+            <div class="fire-popup-title">
+              <strong>산불 발생 정보</strong>
+              <span>대시보드 진입 시 즉시 표출 · 산불 마크 클릭 시 다시 열기</span>
+              <div class="fire-popup-badge">상황접수 대상 정보</div>
+            </div>
+            <button class="fire-popup-close" onclick="closeFirePopup()" aria-label="닫기">×</button>
+          </div>
+          <div class="fire-popup-body">
+            <div class="fire-popup-grid">
+              <div class="label">GPS 좌표</div><div class="value">약 36.37, 128.58 · 괴산리 일대(산61 정확 필지 좌표는 공개자료에서 확인되지 않음)</div>
+              <div class="label">주소</div><div class="value">경상북도 의성군 안평면 괴산리 산61 일원</div>
+              <div class="label">산불 구분</div><div class="value">대형 산불 · 산불 대응 3단계(14:10 발령)</div>
+              <div class="label">진행상태</div><div class="value">진화 중 · 14:30 기준 진화율 30%</div>
+              <div class="label">발견/접수 시각</div><div class="value">2025-03-22 11:24경 신고·발생 (공식 자료 일부는 11:25로 표기)</div>
+              <div class="label">신고 기관명</div><div class="value">119상황실 접수 · 개인 신고</div>
+              <div class="label">신고자</div><div class="value">발화 추정 현장에 있던 성묘객 일행의 딸 · 성명·연락처 비공개</div>
+              <div class="label">풍향 / 풍속</div><div class="value">풍향 공개자료 미확인 / 약 4.9 m/s(14:30 기준)</div>
+              <div class="label">산림상태</div><div class="value">괴산리 야산 · 묘지 인근에서 산림으로 확산</div>
+              <div class="label">지형 / 담수지</div><div class="value">야산 정상 부근으로 확산 · 담수지 세부 여건은 공개자료 미확인</div>
+              <div class="label">화세 규모</div><div class="value">산불 대응 3단계 · 진화율 30% · 확산 진행</div>
+              <div class="label">현장 접근로</div><div class="value">세부 접근로는 공개자료에서 확인되지 않음</div>
+              <div class="label">주요시설 유무</div><div class="value">인근 민가·주민 대피 필요 · 안평면사무소 대피 안내</div>
+            </div>
+            <div class="fire-popup-foot">
+              관련 근거: <b>제7조(상황접수 및 전파)</b>에 따라 신고기관명, 신고자 성명·연락처, 산불발생 장소·발견시간, 기상여건·산림상태·지형·담수지 여건, 화세 규모·진행상황, 현장 접근로 및 주요시설 유무를 파악하여 즉시 전파하도록 구성했습니다. <br><span style="color:#9ca3af">※ 화면의 사건 정보는 2025년 3월 22일 의성군 안평면 괴산리 산61 산불의 공개자료를 기준으로 구성했습니다.</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="layerpanel">
+          <div class="layerpanel-head">
+            <div class="layerpanel-head-copy"><strong>지도 레이어</strong><span>체크박스로 필요한 정보만 켜고 끌 수 있습니다.</span></div>
+            <button class="layerpanel-toggle" id="layerPanelToggle" onclick="toggleLayerPanel()" title="지도 레이어 축소">−</button>
+          </div>
+          <div class="layerpanel-scroll">
+
+            <div class="layer-group">
+              <div class="layer-title"><span>🌬 기상</span><span class="priority-tag">예측입력</span></div>
+              <div class="layer-options">
+                <label><input type="checkbox" checked onchange="setLayer('layer-wind',this.checked)"><span class="swatch line" style="background:#0ea5e9"></span>풍향·풍속</label>
+                <label><input type="checkbox" checked onchange="setLayer('layer-weatherstation',this.checked)"><span class="swatch dot" style="background:#0284c7"></span>AWS 관측지점</label>
+                <label><input type="checkbox" onchange="setLayer('layer-moisture',this.checked)"><span class="swatch" style="background:#38bdf8"></span>연료수분/실효습도</label>
+              </div>
+            </div>
+
+            <div class="layer-group">
+              <div class="layer-title"><span>⛰ 지형·연료</span><span class="priority-tag">예측입력</span></div>
+              <div class="layer-options">
+                <label><input type="checkbox" checked onchange="setLayer('layer-contours',this.checked)"><span class="swatch line" style="background:#9ca3af"></span>고도 DEM</label>
+                <label><input type="checkbox" onchange="setLayer('layer-slope',this.checked)"><span class="swatch" style="background:#8b5e3c"></span>경사·사면향</label>
+                <label><input type="checkbox" checked onchange="setLayer('layer-fuel',this.checked)"><span class="swatch" style="background:#4f8b3a"></span>임상·연료모델</label>
+                <label><input type="checkbox" onchange="setLayer('layer-canopy',this.checked)"><span class="swatch dot" style="background:#1f6b35"></span>수관밀도</label>
+              </div>
+            </div>
+
+            <div class="layer-group">
+              <div class="layer-title"><span>👥 인구·대피</span><span class="priority-tag p1">① 인명</span></div>
+              <div class="layer-options">
+                <label><input type="checkbox" checked onchange="setLayer('layer-villages',this.checked)"><span class="swatch" style="background:#fde68a"></span>마을 경계</label>
+                <label><input type="checkbox" checked onchange="setLayer('layer-population',this.checked)"><span class="swatch dot" style="background:#ef4444"></span>인구·취약계층 밀도</label>
+                <label><input type="checkbox" checked onchange="setLayer('layer-vulnerable',this.checked)"><span class="swatch dot" style="background:#be123c"></span>취약시설<span class="count-badge">2</span></label>
+                <label><input type="checkbox" checked onchange="setLayer('layer-shelter',this.checked)"><span class="swatch" style="background:#2563eb"></span>대피소<span class="count-badge">1</span></label>
+              </div>
+            </div>
+
+            <div class="layer-group">
+              <div class="layer-title"><span>🛣 도로·접근</span><span class="priority-tag">진화/대피</span></div>
+              <div class="layer-options">
+                <label><input type="checkbox" checked onchange="setLayer('layer-roads',this.checked)"><span class="swatch line" style="background:#6b7280"></span>도로</label>
+                <label><input type="checkbox" onchange="setLayer('layer-forestroad',this.checked)"><span class="swatch line" style="background:#7c5c3b"></span>임도</label>
+                <label><input type="checkbox" checked onchange="setLayer('layer-evacroute',this.checked)"><span class="swatch line" style="background:#2563eb"></span>대피 경로</label>
+                <label><input type="checkbox" checked onchange="setLayer('layer-fireaccess',this.checked)"><span class="swatch line" style="background:#f59e0b"></span>진화차량 진입로</label>
+              </div>
+            </div>
+
+
+            <div class="layer-group">
+              <div class="layer-title"><span>🚨 유관기관</span><span class="priority-tag p2">대응자원</span></div>
+              <div class="layer-options">
+                <label><input type="checkbox" checked onchange="toggleAgencyCategory('fire',this.checked)"><span class="swatch dot" style="background:#dc2626"></span>소방기관<span class="count-badge">2</span></label>
+                <label><input type="checkbox" checked onchange="toggleAgencyCategory('police',this.checked)"><span class="swatch dot" style="background:#1d4ed8"></span>경찰기관<span class="count-badge">2</span></label>
+                <label><input type="checkbox" checked onchange="toggleAgencyCategory('gov',this.checked)"><span class="swatch dot" style="background:#0f766e"></span>지자체·상황실<span class="count-badge">2</span></label>
+                <label><input type="checkbox" checked onchange="toggleAgencyCategory('forest',this.checked)"><span class="swatch dot" style="background:#166534"></span>산림·진화지원<span class="count-badge">1</span></label>
+              </div>
+              <div class="layer-note">기관 마크를 클릭하면 위치·연락/역할·자원 정보를 확인할 수 있습니다. 자원 수량은 UI 시연용 예시값입니다.</div>
+            </div>
+
+            <div class="layer-group">
+              <div class="layer-title"><span>🏭 국가·주요시설</span><span class="priority-tag p2">② 보호</span></div>
+              <div class="layer-options">
+                <label><input type="checkbox" checked onchange="setLayer('layer-national',this.checked)"><span class="swatch" style="background:#0f172a"></span>국가기간산업·전력시설<span class="count-badge">2</span></label>
+                <label><input type="checkbox" checked onchange="setLayer('layer-military',this.checked)"><span class="swatch" style="background:#475569"></span>군사시설<span class="count-badge">1</span></label>
+                <label><input type="checkbox" checked onchange="setLayer('layer-houses',this.checked)"><span class="swatch dot" style="background:#8b5cf6"></span>주택·가옥<span class="count-badge">8</span></label>
+              </div>
+            </div>
+
+            <div class="layer-group">
+              <div class="layer-title"><span>🏛 문화재·산림자원</span><span class="priority-tag p3">②·④ 보호</span></div>
+              <div class="layer-options">
+                <label><input type="checkbox" checked onchange="setLayer('layer-cultural',this.checked)"><span class="swatch" style="background:#f59e0b"></span>국가유산(문화재)<span class="count-badge">1</span></label>
+                <label><input type="checkbox" checked onchange="setLayer('layer-protectedforest',this.checked)"><span class="swatch line" style="background:#166534"></span>산림보호구역·중요 산림</label>
+              </div>
+              <div class="layer-note">법규 우선순위: ① 인명 → ② 국가기간·군사·문화재 → ③ 재산 → ④ 중요 산림자원 → ⑤ 기타 산림</div>
+            </div>
+          </div>
+        </div>
+
+
+        <div class="map-zoom-control">
+          <button onclick="zoomMap(-1)" title="축소">−</button>
+          <span class="zoom-label">지도 확대·축소</span>
+          <button onclick="zoomMap(1)" title="확대">+</button>
+          <button onclick="resetMapView()" title="의성 산불 중심으로">⌂</button>
+        </div>
+
+        <div class="map-legend">
+          <div class="lg"><span class="swatch" style="background:#7f1d1d"></span>현재 화선</div>
+          <div class="lg"><span class="swatch" style="background:#ef4444"></span>P5 5시간</div>
+          <div class="lg"><span class="swatch line" style="background:#f97316"></span>P8 8시간</div>
+          <div class="lg"><span class="swatch dot" style="background:#be123c"></span>취약시설</div>
+          <div class="lg"><span class="swatch" style="background:#0f172a"></span>국가시설</div>
+          <div class="lg"><span class="swatch" style="background:#f59e0b"></span>국가유산</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card response-panel">
+      <div class="head">
+        <div>
+          <h2>대응 제안</h2>
+          <div class="k" style="margin-top:4px">통합지휘본부장이 확인할 진화·대피 의사결정 항목</div>
+        </div>
+        <span class="badge danger">14개 항목</span>
+      </div>
+      <div class="body">
+        <div class="response-tabs">
+          <button class="response-tab active" onclick="showResponseTab('summary',this)">요약</button>
+          <button class="response-tab" onclick="showResponseTab('fire',this)">진화</button>
+          <button class="response-tab" onclick="showResponseTab('evac',this)">대피</button>
+        </div>
+        <div class="response-content">
+          <div class="response-pane active" id="response-summary">
+            <div class="response-summary">
+              <b>[요약]</b> 즉시 9 | 대기 2 | 협의 1 | 요청 2 | 보고 0 | 근거 부족 0(부분 1: S3) | 정보 부족 0 | 없음 3. 현재 생성된 의사결정 결과에서는 즉시 시행 항목이 가장 많고, 일부 항목은 조건 충족 전 대기하거나 발령권자·유관기관과의 협의 또는 요청이 필요합니다. S3은 자원 수량 산정 근거가 부분적으로 부족한 상태입니다.
+            </div>
+
+            <div class="prediction-linked-summary">
+              <div class="prediction-current">
+                <span>선택한 확산 시점</span>
+                <b id="selectedPredictionLabel">현재~+5h 중첩</b>
+              </div>
+
+              <div class="prediction-priority">
+                <div class="prediction-mini-title">현재 시점 기준 우선 대응</div>
+                <ol id="predictionPriorityList">
+                  <li><b>E2</b> 대피 명령 대상·순서·시점</li>
+                  <li><b>S2</b> 진화 우선지역·보호대상 선정</li>
+                  <li><b>S1</b> 대응단계 판단·격상 검토</li>
+                </ol>
+              </div>
+
+              <div class="prediction-change" id="predictionChangeBox">
+                <div class="prediction-mini-title">직전 시점 대비 변화</div>
+                <p id="predictionChangeText">+3h 대비 위험마을 +1곳 · 영향 주택 +10동 · 국가유산 +1개 · 즉시 대응 +2건</p>
+              </div>
+            </div>
+            <div class="response-note">확산 예측 시점을 바꾸면 요약과 우선 대응 내용이 함께 갱신됩니다. 상세 항목은 ‘진화’ 또는 ‘대피’ 탭에서 확인할 수 있습니다.</div>
+          </div>
+          <div class="response-pane" id="response-fire">
+            <div class="response-list response-category-list">
+              <button class="response-item" data-decision="S1" onclick="showResponseDecision('S1',this)"><b>S1 대응단계 판단·격상 검토</b><span>현재 값이 어느 대응단계 기준에 해당하는지 검토</span></button>
+              <button class="response-item" data-decision="S2" onclick="showResponseDecision('S2',this)"><b>S2 진화 우선지역·보호대상 선정</b><span>보호대상 우선순위와 진화 우선지역 선정</span></button>
+              <button class="response-item" data-decision="S3" onclick="showResponseDecision('S3',this)"><b>S3 진화자원 투입·배분·재배치</b><span>헬기·인력·차량 등 가용 자원의 배분 검토</span></button>
+              <button class="response-item" data-decision="S4" onclick="showResponseDecision('S4',this)"><b>S4 진화 방식·시간대 전략</b><span>기상·일몰·일출에 따른 진화 방식 전환</span></button>
+              <button class="response-item" data-decision="S5" onclick="showResponseDecision('S5',this)"><b>S5 시설 보호 조치</b><span>주택·국가유산·전력시설 보호 조치</span></button>
+              <button class="response-item" data-decision="S6" onclick="showResponseDecision('S6',this)"><b>S6 유관기관 동원·협조 요청</b><span>추가 장비·인력·유관기관 지원 요청</span></button>
+              <button class="response-item" data-decision="S7" onclick="showResponseDecision('S7',this)"><b>S7 진화인력 안전·투입 관리</b><span>진화인력 위치·퇴로·위험조건 안전 관리</span></button>
+            </div>
+            <div class="response-detail" id="response-fire-detail"></div>
+          </div>
+          <div class="response-pane" id="response-evac">
+            <div class="response-list response-category-list">
+              <button class="response-item" data-decision="E1" onclick="showResponseDecision('E1',this)"><b>E1 위험구역 설정</b><span>P5 위험구역·P8 잠재 위험구역 설정</span></button>
+              <button class="response-item" data-decision="E2" onclick="showResponseDecision('E2',this)"><b>E2 대피 명령 대상·순서·시점</b><span>마을별 대피 순서와 시점 판단</span></button>
+              <button class="response-item" data-decision="E3" onclick="showResponseDecision('E3',this)"><b>E3 취약시설·미대피 주민 조치</b><span>취약시설 이송과 미대피 주민 대응</span></button>
+              <button class="response-item" data-decision="E4" onclick="showResponseDecision('E4',this)"><b>E4 대피소 배정·분산</b><span>안전 대피소와 수용 인원 기반 배정</span></button>
+              <button class="response-item" data-decision="E5" onclick="showResponseDecision('E5',this)"><b>E5 대피 경로·교통통제</b><span>대피로 위험구간과 진입로 충돌 확인</span></button>
+              <button class="response-item" data-decision="E6" onclick="showResponseDecision('E6',this)"><b>E6 전파(재난문자·방송)</b><span>대피 단계에 따른 재난문자·방송 송출</span></button>
+              <button class="response-item" data-decision="E7" onclick="showResponseDecision('E7',this)"><b>E7 인명구조·긴급구조 요청</b><span>고립·미대피·부상자 발생 시 구조 요청</span></button>
+            </div>
+            <div class="response-detail" id="response-evac-detail"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+<div class="drawer" id="drawer">
+  <button class="btn" style="float:right" onclick="closePanel()">닫기</button>
+  <h3 id="drawerTitle">상세 정보</h3>
+  <div class="notice">이 영역은 자유형 챗봇이 아니라, 이미 생성된 결과를 근거·요약·변경사항 형태로 재구성하는 보조 기능입니다.</div>
+  <div class="result" id="drawerContent"></div>
+  <div class="source" id="drawerSource"></div>
+</div>
+<script>
+
+
+
+const UISEONG_FIRE_CENTER=[128.58,36.37];
+const agencyMarkers=[];
+let staticMapScale=1;
+let staticMapX=0;
+let staticMapY=0;
+let staticDragging=false;
+let dragStartX=0;
+let dragStartY=0;
+let dragOriginX=0;
+let dragOriginY=0;
+let activeAgencyPopup=null;
+
+const agencyData=[
+  {
+    name:'의성소방서', category:'fire', icon:'🚒',
+    coordinates:[128.690,36.350],
+    role:'산불 진화·구조·구급 및 현장 소방 대응',
+    phone:'119 / 관할 소방기관',
+    distance:'발화지 기준 약 10~15km권',
+    resources:['소방차 8대','구급차 2대','인력 38명'],
+    note:'자원 수량은 화면 기능 설명을 위한 시연용 예시값'
+  },
+  {
+    name:'의성119안전센터', category:'fire', icon:'🚑',
+    coordinates:[128.684,36.354],
+    role:'초기 출동·화재 진압·구급 지원',
+    phone:'119',
+    distance:'발화지 기준 약 10km권',
+    resources:['펌프차 2대','물탱크차 1대','구급차 1대'],
+    note:'자원 수량은 화면 기능 설명을 위한 시연용 예시값'
+  },
+  {
+    name:'의성경찰서', category:'police', icon:'🚓',
+    coordinates:[128.697,36.352],
+    role:'교통통제·주민대피 지원·현장 질서 유지',
+    phone:'112',
+    distance:'발화지 기준 약 10~15km권',
+    resources:['순찰차 6대','교통지원 2개조','현장지원 18명'],
+    note:'자원 수량은 화면 기능 설명을 위한 시연용 예시값'
+  },
+  {
+    name:'안평파출소', category:'police', icon:'👮',
+    coordinates:[128.595,36.382],
+    role:'발화지 인근 교통통제·주민 안내·대피 지원',
+    phone:'112',
+    distance:'발화지 인접',
+    resources:['순찰차 2대','현장지원 6명'],
+    note:'자원 수량은 화면 기능 설명을 위한 시연용 예시값'
+  },
+  {
+    name:'의성군청 재난안전대책본부', category:'gov', icon:'🏢',
+    coordinates:[128.697,36.3525],
+    role:'통합 상황관리·주민대피·유관기관 협조',
+    phone:'의성군청',
+    distance:'의성읍',
+    resources:['상황총괄','대피지원','재난문자·행정지원'],
+    note:'기능/역할 중심 표시'
+  },
+  {
+    name:'안평면사무소', category:'gov', icon:'🏛️',
+    coordinates:[128.598,36.383],
+    role:'주민대피 안내·취약계층 확인·현장 행정지원',
+    phone:'안평면 행정복지센터',
+    distance:'발화지 인접',
+    resources:['대피지원반','주민연락망','취약계층 명부'],
+    note:'기능/역할 중심 표시'
+  },
+  {
+    name:'산림 진화지원 거점', category:'forest', icon:'🌲',
+    coordinates:[128.635,36.405],
+    role:'산불진화대·산림 자원 지원 및 현장 연계',
+    phone:'산림 대응기관 연계',
+    distance:'의성군 권역',
+    resources:['진화대 1개조','진화차 3대','등짐펌프·개인진화장비'],
+    note:'거점 위치와 자원 수량은 시연용 예시값'
+  }
+];
+
+function agencyPopupHTML(a){
+  const rows=a.resources.map((r,i)=>'<div class="label">'+(i===0?'가용 자원':'')+'</div><div>'+r+'</div>').join('');
+  return '<div class="agency-popup">'+
+    '<div class="agency-popup-head"><b>'+a.icon+' '+a.name+'</b><span>'+a.role+'</span></div>'+
+    '<div class="agency-popup-body">'+
+      '<div class="agency-resource-grid">'+
+        '<div class="label">거리/권역</div><div>'+a.distance+'</div>'+
+        '<div class="label">연락</div><div>'+a.phone+'</div>'+
+        rows+
+      '</div>'+
+      '<div class="agency-demo-note">※ '+a.note+'</div>'+
+    '</div>'+
+  '</div>';
+}
+
+// 의성군 일대를 기존 SVG 지도 좌표에 맞춰 단순 투영
+function coordToPercent([lng,lat]){
+  const minLng=128.50,maxLng=128.72,minLat=36.32,maxLat=36.44;
+  const x=((lng-minLng)/(maxLng-minLng))*100;
+  const y=((maxLat-lat)/(maxLat-minLat))*100;
+  return [Math.max(3,Math.min(97,x)),Math.max(5,Math.min(95,y))];
+}
+
+function closeAgencyPopup(){
+  if(activeAgencyPopup){
+    activeAgencyPopup.remove();
+    activeAgencyPopup=null;
+  }
+}
+
+function openAgencyPopup(a, markerEl){
+  closeAgencyPopup();
+  const stage=document.getElementById('staticMapStage');
+  if(!stage) return;
+  const popup=document.createElement('div');
+  popup.className='static-agency-popup';
+  popup.innerHTML='<button class="close-agency" onclick="closeAgencyPopup()">×</button>'+agencyPopupHTML(a);
+  popup.style.left=markerEl.style.left;
+  popup.style.top=markerEl.style.top;
+  stage.appendChild(popup);
+  activeAgencyPopup=popup;
+}
+
+function addAgencyMarkers(){
+  const layer=document.getElementById('agencyMarkerLayer');
+  if(!layer) return;
+  layer.innerHTML='';
+  agencyMarkers.length=0;
+
+  agencyData.forEach(a=>{
+    const [x,y]=coordToPercent(a.coordinates);
+    const el=document.createElement('button');
+    el.className='agency-marker '+a.category;
+    el.dataset.category=a.category;
+    el.title=a.name;
+    el.textContent=a.icon;
+    el.style.left=x+'%';
+    el.style.top=y+'%';
+    el.addEventListener('click',(e)=>{
+      e.stopPropagation();
+      openAgencyPopup(a,el);
+    });
+    layer.appendChild(el);
+    agencyMarkers.push({category:a.category,element:el});
+  });
+}
+
+function toggleAgencyCategory(category,on){
+  agencyMarkers.filter(x=>x.category===category).forEach(x=>{
+    x.element.style.display=on?'flex':'none';
+  });
+  if(!on && activeAgencyPopup) closeAgencyPopup();
+}
+
+function applyStaticMapTransform(){
+  const stage=document.getElementById('staticMapStage');
+  if(!stage) return;
+  stage.style.transform='translate('+staticMapX+'px,'+staticMapY+'px) scale('+staticMapScale+')';
+}
+
+function initStaticMap(){
+  addAgencyMarkers();
+
+  const viewport=document.getElementById('staticMapViewport');
+  const fire=document.getElementById('staticFireMarker');
+  if(fire) fire.addEventListener('click',(e)=>{e.stopPropagation();openFirePopup();});
+  if(!viewport) return;
+
+  viewport.addEventListener('pointerdown',(e)=>{
+    if(e.target.closest('button')) return;
+    staticDragging=true;
+    viewport.classList.add('dragging');
+    dragStartX=e.clientX;
+    dragStartY=e.clientY;
+    dragOriginX=staticMapX;
+    dragOriginY=staticMapY;
+    viewport.setPointerCapture?.(e.pointerId);
+  });
+
+  viewport.addEventListener('pointermove',(e)=>{
+    if(!staticDragging) return;
+    staticMapX=dragOriginX+(e.clientX-dragStartX);
+    staticMapY=dragOriginY+(e.clientY-dragStartY);
+    applyStaticMapTransform();
+  });
+
+  const stopDrag=(e)=>{
+    staticDragging=false;
+    viewport.classList.remove('dragging');
+    try{viewport.releasePointerCapture?.(e.pointerId)}catch(_){}
+  };
+  viewport.addEventListener('pointerup',stopDrag);
+  viewport.addEventListener('pointercancel',stopDrag);
+}
+
+function zoomMap(direction){
+  const next=Math.max(1,Math.min(2.6,staticMapScale+(direction>0?0.2:-0.2)));
+  staticMapScale=next;
+  applyStaticMapTransform();
+}
+
+function resetMapView(){
+  staticMapScale=1;
+  staticMapX=0;
+  staticMapY=0;
+  applyStaticMapTransform();
+}
+
+function setLayer(id,on){
+  const el=document.getElementById(id);
+  if(el) el.style.display=on?'':'none';
+}
+const predictionStates={
+  'layer-f0':{
+    label:'현재 F0',
+    priorities:['S1 대응단계 판단·격상 검토','S3 진화자원 투입·배분·재배치','S7 진화인력 안전·투입 관리'],
+    change:'현재 화선 기준입니다. 이전 예측 시점과의 변화 비교는 없습니다.'
+  },
+  'layer-p1':{
+    label:'+1시간',
+    priorities:['S2 진화 우선지역·보호대상 선정','S3 진화자원 투입·배분·재배치','S7 진화인력 안전·투입 관리'],
+    change:'현재 대비 확산범위 증가 · 괴산리 인접 보호대상 접근 가능성 상승'
+  },
+  'layer-p3':{
+    label:'+3시간',
+    priorities:['S2 진화 우선지역·보호대상 선정','E1 위험구역 설정','E2 대피 명령 대상·순서·시점'],
+    change:'+1h 대비 위험구역 확대 · 대피 준비 검토 항목 활성화'
+  },
+  'layer-p5':{
+    label:'+5시간 P5',
+    priorities:['E2 대피 명령 대상·순서·시점','S2 진화 우선지역·보호대상 선정','S5 시설 보호 조치'],
+    change:'+3h 대비 위험마을 +1곳 · 영향 주택 +10동 · 국가유산 +1개 · 즉시 대응 +2건'
+  },
+  'layer-p8':{
+    label:'+8시간 P8',
+    priorities:['E1 위험구역 설정','E4 대피소 배정·분산','E6 전파(재난문자·방송)'],
+    change:'+5h 대비 잠재 위험구역 확대 · 사전 대피 준비 대상 추가'
+  }
+};
+
+function updatePredictionSummary(){
+  const active=[...document.querySelectorAll('.map-topbar .timebtn[data-spread].active')];
+  const label=document.getElementById('selectedPredictionLabel');
+  const list=document.getElementById('predictionPriorityList');
+  const change=document.getElementById('predictionChangeText');
+  if(!label||!list||!change) return;
+
+  if(active.length===0){
+    label.textContent='선택 없음';
+    list.innerHTML='<li>확산 예측 시점을 선택하세요.</li>';
+    change.textContent='선택된 확산 예측 시점이 없습니다.';
+    return;
+  }
+
+  const last=active[active.length-1].dataset.spread;
+  const state=predictionStates[last];
+  label.textContent=active.length>1 ? state.label+' 포함 '+active.length+'개 시점 중첩' : state.label;
+
+  list.innerHTML=state.priorities.map(x=>{
+    const parts=x.split(' ');
+    const code=parts.shift();
+    return '<li><b>'+code+'</b> '+parts.join(' ')+'</li>';
+  }).join('');
+  change.textContent=state.change;
+}
+
+function setSpreadVisibility(id,on){
+  const el=document.getElementById(id);
+  if(el) el.style.display=on?'':'none';
+}
+
+function toggleSpread(id,btn){
+  const on=btn.classList.toggle('active');
+  setSpreadVisibility(id,on);
+  updatePredictionSummary();
+}
+
+function showAllSpread(){
+  document.querySelectorAll('.map-topbar .timebtn[data-spread]').forEach(btn=>{
+    btn.classList.add('active');
+    setSpreadVisibility(btn.dataset.spread,true);
+  });
+  updatePredictionSummary();
+}
+
+let spreadPlayTimer=null;
+function playSpreadTimeline(){
+  const playBtn=document.getElementById('playSpreadBtn');
+  const buttons=[...document.querySelectorAll('.map-topbar .timebtn[data-spread]')];
+
+  if(spreadPlayTimer){
+    clearInterval(spreadPlayTimer);
+    spreadPlayTimer=null;
+    if(playBtn){playBtn.textContent='▶ 재생';playBtn.classList.remove('playing');}
+    return;
+  }
+
+  let index=0;
+  buttons.forEach(btn=>{
+    btn.classList.remove('active');
+    setSpreadVisibility(btn.dataset.spread,false);
+  });
+
+  const step=()=>{
+    if(index>=buttons.length){
+      clearInterval(spreadPlayTimer);
+      spreadPlayTimer=null;
+      if(playBtn){playBtn.textContent='▶ 재생';playBtn.classList.remove('playing');}
+      return;
+    }
+    const btn=buttons[index];
+    btn.classList.add('active');
+    setSpreadVisibility(btn.dataset.spread,true);
+    updatePredictionSummary();
+    index++;
+  };
+
+  if(playBtn){playBtn.textContent='■ 정지';playBtn.classList.add('playing');}
+  step();
+  spreadPlayTimer=setInterval(step,900);
+}
+
+function toggleLayerPanel(){
+  const panel=document.querySelector('.layerpanel');
+  const btn=document.getElementById('layerPanelToggle');
+  if(!panel||!btn) return;
+  const minimized=panel.classList.toggle('minimized');
+  btn.textContent=minimized?'+':'−';
+  btn.title=minimized?'지도 레이어 펼치기':'지도 레이어 축소';
+}
+
+function showResponseTab(key,btn){
+  document.querySelectorAll('.response-tab').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.response-pane').forEach(x=>x.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  const pane=document.getElementById('response-'+key);
+  if(pane) pane.classList.add('active');
+}
+
+function initFirePopupDrag(){
+  const popup=document.getElementById('firePopup');
+  const handle=popup?.querySelector('.fire-popup-head');
+  const mapBox=popup?.closest('.map');
+  if(!popup||!handle||!mapBox) return;
+
+  let dragging=false, startX=0, startY=0, startLeft=0, startTop=0;
+
+  handle.addEventListener('pointerdown',(e)=>{
+    if(e.target.closest('.fire-popup-close')) return;
+    dragging=true;
+    startX=e.clientX;
+    startY=e.clientY;
+    startLeft=popup.offsetLeft;
+    startTop=popup.offsetTop;
+    handle.setPointerCapture?.(e.pointerId);
+    e.preventDefault();
+  });
+
+  handle.addEventListener('pointermove',(e)=>{
+    if(!dragging) return;
+    const maxLeft=Math.max(0,mapBox.clientWidth-popup.offsetWidth);
+    const maxTop=Math.max(0,mapBox.clientHeight-popup.offsetHeight);
+    popup.style.left=Math.min(maxLeft,Math.max(0,startLeft+(e.clientX-startX)))+'px';
+    popup.style.top=Math.min(maxTop,Math.max(0,startTop+(e.clientY-startY)))+'px';
+  });
+
+  const stop=(e)=>{
+    dragging=false;
+    try{handle.releasePointerCapture?.(e.pointerId)}catch(_){}
+  };
+  handle.addEventListener('pointerup',stop);
+  handle.addEventListener('pointercancel',stop);
+}
+
+function toggleSvg(id){const e=document.getElementById(id);e.style.display=e.style.display==='none'?'':'none'}
+function filterD(g,b){const box=b.closest('.card');box.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');box.querySelectorAll('.decision[data-group]').forEach(d=>d.style.display=(g==='all'||d.dataset.group.includes(g))?'':'none')}
+function filterCore(g,b){const box=b.closest('.card');box.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');box.querySelectorAll('.core-decision').forEach(d=>d.style.display=(g==='all'||d.dataset.core===g)?'':'none')}
+const decisionData={
+S1:{type:'진화',name:'S1 대응단계 판단·격상 검토',authority:'협의',finding:'예상 피해면적 45ha, 평균풍속 6m/s를 기준으로 확산대응 1단계 격상 검토가 필요합니다.',reason:'대응단계는 동원할 진화자원 규모를 정하기 위한 판단이며, 피해면적·평균풍속·예상 진화시간·시설피해가 시점마다 달라지므로 현재 값이 어느 단계 기준인지 통합지휘본부장에게 제안합니다.',info:'1차: P5, 주택·주요시설 좌표, 풍속 시계열, 공식 대응단계, 현재 피해면적, 예상 진화시간 / 2차: 예상 피해면적, 시설피해 우려 동수, 평균풍속, 권고 대응단계',evidence:'표준매뉴얼 p.13, p.73, p.22, p.91'},
+S2:{type:'진화',name:'S2 진화 우선지역·보호대상 선정',authority:'직접',finding:'P5 내 A마을·B마을, 송전선, 주택군을 보호대상으로 확인하고 우선순위를 정합니다.',reason:'진화 우선순위가 인명 → 국가기간·군사·국가유산 → 재산 → 중요 산림 → 기타 산림 순으로 정해져 있으므로, 확산예측 범위 안의 보호대상을 등급과 거리 기준으로 정렬해 제안합니다.',info:'1차: P5, F0, 마을 경계, 취약시설·국가유산·군사·기간시설, 주택, 산림보호구역 / 2차: 보호대상 등급별 포함 목록, F0 거리 순위, 우선지역 목록',evidence:'표준매뉴얼 p.77, p.41, p.118'},
+S3:{type:'진화',name:'S3 진화자원 투입·배분·재배치',authority:'직접',finding:'북동 구역을 우선 진화구역으로 보고 보유 자원과 현재 투입 현황을 비교합니다.',reason:'초기 투입 이후 추가 투입은 확산 정도에 따라 단계적으로 이뤄지고, 재배치는 구역별 진화율에 따라 달라지므로 시점별 배분안을 제안합니다.',info:'1차: P5, 헬기·인력·차량, 투입 위치, DEM, 임상, 도로·임도, 소방서·항공관리소, 화선 길이·진화율 / 2차: 진화구역 분할, 진화 난도, 우선순위, 자원 부족분, 헬기 운용 가능 여부',evidence:'표준매뉴얼 p.72, p.77, p.78, p.41'},
+S4:{type:'진화',name:'S4 진화 방식·시간대 전략',authority:'직접',finding:'현재 풍속과 일출·일몰 시각을 반영해 지상진화 집중 또는 헬기 재투입 전환 시점을 검토합니다.',reason:'강풍·동시다발 상황, 일몰·일출 전후, 강풍 완화 여부에 따라 진화 방식이 달라지므로 기상 변화 시점마다 방식 전환을 제안합니다.',info:'1차: 풍속·풍향·시정 관측, 단기예보, 기상특보, 일출·일몰 시각, t0 / 2차: 헬기 운용 가능 여부, 풍속 완화 예상시간, 야간 진화 구간',evidence:'표준매뉴얼 p.78'},
+S5:{type:'진화',name:'S5 시설 보호 조치',authority:'직접 / 요청',finding:'P5 안의 주택·송전선·국가유산 등 보호대상별로 필요한 보호 조치를 연결합니다.',reason:'보호대상 주변 진화장비 집중 배치, 예비 살수, 송전시설 전류 차단·우회선로 확보 등 시설별 조치가 정해져 있으므로 대상과 요청기관을 제안합니다.',info:'1차: P5, 주택·국가유산·변전소, 송전선, 도로망, 소방차 / 2차: 보호대상 목록, 접근 경로 유무, 조치 유형 매핑',evidence:'표준매뉴얼 p.79, p.95, p.119'},
+S6:{type:'진화',name:'S6 유관기관 동원·협조 요청',authority:'직접 / 요청',finding:'현재 자원이 부족하거나 복수 행정구역으로 확산될 경우 추가 동원·협조 대상을 판단합니다.',reason:'통합지휘본부장이 소방·경찰·군 및 인접 시·군 자원을 동원·요청할 수 있으므로, 자원 부족 시 어느 기관에 무엇을 요청할지 제안합니다.',info:'1차: P5, 시·군·구 경계, 인접 기관 가용 자원, 공식 대응단계 / 2차: 걸친 행정구역 수, 지휘권 변경 여부, 자원 부족분, 요청 대상 기관·자원',evidence:'표준매뉴얼 p.22, p.78, p.92, p.99, p.119, p.72'},
+S7:{type:'진화',name:'S7 진화인력 안전·투입 관리',authority:'직접',finding:'P5 내 진화인력 위치와 퇴로, 풍향 급변 여부를 기준으로 투입 유지·철수 판단을 지원합니다.',reason:'투입 전 임무·안전장구·위치추적 확인이 필요하고, 풍속·풍향·지형·연료가 인명피해 판단 요소이므로 위험 조건에서 안전조치를 제안합니다.',info:'1차: P5, 진화인력 위치, 풍향 시계열, 도로·임도, DEM / 2차: 위험 인력 목록, 퇴로 유무, 풍향 급변 판정, 인명·2차 피해 위험',evidence:'표준매뉴얼 p.77, p.78, p.118'},
+E1:{type:'대피',name:'E1 위험구역 설정',authority:'직접',finding:'A·B마을은 P5 위험구역, C마을은 P8 잠재 위험구역 후보로 구분합니다.',reason:'화선 도달 5시간 구역은 즉시 실행, 8시간 구역은 실행 대기 대상이므로 확산예측이 갱신될 때마다 해당 마을을 구분해 제안합니다.',info:'1차: P5, P8, 행정리 경계 / 2차: 위험구역 마을 목록, 잠재 위험구역 마을 목록',evidence:'표준매뉴얼 p.74~76, p.75, p.81'},
+E2:{type:'대피',name:'E2 대피 명령 대상·순서·시점',authority:'직접',finding:'A마을을 우선 대피 대상으로 보고 취약계층부터 순차 대피하는 시점을 검토합니다.',reason:'마을 단위 대피명령, 안전취약계층 우선 대피, 야간 위험 시 일몰 전 사전대피 원칙에 따라 어느 마을부터 언제 명령할지 제안합니다.',info:'1차: P5, P8, F0, 마을 경계, 인구·고령자·장애인, 일출·일몰, 대피명령 상태 / 2차: 마을 대피 순위, 야간 포함 여부, 마을별 시점',evidence:'표준매뉴얼 p.76, p.79, p.75, p.84'},
+E3:{type:'대피',name:'E3 취약시설·미대피 주민 조치',authority:'직접',finding:'P5/P8 내 취약시설과 미대피 보고 여부를 확인해 별도 이송·강제 대피 조치를 판단합니다.',reason:'요양원·장애인시설 등 취약시설을 위험구역에 포함하고 미대피 주민은 별도 조치해야 하므로 시설별 이송과 미대피 대응을 제안합니다.',info:'1차: P5, P8, 취약시설 좌표·수용인원, 대피 완료·미대피 보고 / 2차: 이송 대상 시설·인원, 미대피 마을 목록',evidence:'표준매뉴얼 p.75, p.84, p.90, p.96'},
+E4:{type:'대피',name:'E4 대피소 배정·분산',authority:'직접',finding:'P5/P8 밖의 안전 대피소를 찾고 마을별 수용인원과 이동시간을 비교해 배정합니다.',reason:'행정리별 대피경로카드의 대피장소·집결지·버스 회차·이동시간 정보를 활용해 안전 대피소와 초과 시 분산안을 제안합니다.',info:'1차: P5, P8, 대피소 좌표·수용인원, 도로망, 마을 인구 / 2차: 안전 대피소 목록, 최근접 대피소·이동시간, 배정안·초과분',evidence:'표준매뉴얼 p.65, p.34'},
+E5:{type:'대피',name:'E5 대피 경로·교통통제',authority:'요청(경찰)',finding:'지방도 415호의 대피 경로와 진화차량 진입로 중첩 여부를 확인합니다.',reason:'대피로가 확산 범위 또는 진화차량 진입로와 겹치면 교통통제와 주민대피 지원이 필요하므로 위험 구간과 통제 지점을 제안합니다.',info:'1차: P5, 도로망, 대피소, 소방서, F0 / 2차: 대피 경로 위험 구간, 대피로·진입로 충돌 구간, 통제 요청 지점',evidence:'표준매뉴얼 p.65, p.119'},
+E6:{type:'대피',name:'E6 전파(재난문자·방송)',authority:'직접',finding:'대피 상태가 변경되면 대상 읍면동과 송출 단계에 맞춰 재난문자·방송 전파를 제안합니다.',reason:'산불 발생·대피 권고·대피 명령 단계별로 긴급재난문자와 자막방송을 송출하도록 되어 있으므로 상태 변화마다 대상 지역과 단계를 제안합니다.',info:'1차: P5, P8, 읍면동 경계, 마을·주택, 대피명령 상태, 송출 이력 / 2차: 전파 대상 읍면동, 송출 단계, 생략 가능 여부',evidence:'표준매뉴얼 p.78~79'},
+E7:{type:'대피',name:'E7 인명구조·긴급구조 요청',authority:'요청(소방)',finding:'고립 후보·미대피·부상 보고가 발생하면 구조 요청 대상과 위치를 제안합니다.',reason:'접근 곤란 지역의 인명구조·대피계획과 수색·구조·구급은 소방 긴급구조체계와 연결되므로 고립·부상 상황에서 요청 위치를 제안합니다.',info:'1차: P5, 도로망, 마을 경계, 진화인력 위치, 부상·미대피 보고, 소방서 / 2차: 고립 후보, 접근 곤란 구역, 구조 요청 목록',evidence:'표준매뉴얼 p.21, p.119'}
+};
+function showResponseDecision(id,btn){
+  const d=decisionData[id];
+  if(!d) return;
+
+  const paneKey=d.type==='진화'?'fire':'evac';
+  const tab=[...document.querySelectorAll('.response-tab')].find(x=>x.textContent.trim()===(d.type==='진화'?'진화':'대피'));
+  showResponseTab(paneKey,tab);
+
+  document.querySelectorAll('.response-item[data-decision]').forEach(x=>x.classList.remove('active'));
+  const targetBtn=btn || document.querySelector('.response-item[data-decision="'+id+'"]');
+  if(targetBtn) targetBtn.classList.add('active');
+
+  const holder=document.getElementById('response-'+paneKey+'-detail');
+  if(!holder) return;
+  holder.innerHTML=
+    '<div class="response-detail-card">'+
+      '<div class="response-detail-title"><b>'+d.name+'</b><span class="badge info">'+d.authority+'</span></div>'+
+      '<div class="response-detail-grid">'+
+        '<div class="label">현재 판정</div><div class="value">'+d.finding+'</div>'+
+        '<div class="label">제안 이유</div><div class="value">'+d.reason+'</div>'+
+        '<div class="label">권한</div><div class="value">'+d.authority+'</div>'+
+        '<div class="label">필요정보</div><div class="value">'+d.info+'</div>'+
+        '<div class="label">근거</div><div class="value">'+d.evidence+'</div>'+
+      '</div>'+
+    '</div>';
+  holder.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+function jumpToDecision(id){
+  showResponseDecision(id);
+}
+const contents={
+  ref:{body:'관련 법령·표준매뉴얼에서 검색된 근거 조항을 우선순위와 함께 표시합니다. 문장별 근거를 연결하고, 근거가 충분하지 않은 항목은 별도 표시합니다.',src:'예시: 산불진화기관 임무·역할 관련 규정 / 표준매뉴얼 검색 결과'},
+  why:{body:'현재 확산 방향, 예상 도달시간, 보호대상, 도로 접근성, 풍속과 현재 대응단계를 함께 반영해 해당 임무가 우선 제시되었습니다. 이는 최종 지휘 판단을 대체하지 않고 판단 근거를 정리합니다.',src:'입력: 확산 예측 + 위험도 규칙 + 검색된 대응 근거'},
+  handoff:{body:'[현장 전달 예시] 현재 임무: A마을 북서측 방어 준비. 담당 구역: 415호 도로 인접 구간. 주요 위험: 북동풍 6m/s, 화선 접근 예상 약 2시간. 우선 확인: 주민 접근 통제·안전 퇴로·통신 유지. 상황 변경 시 즉시 재보고.',src:'상황실용 상세정보를 무전·전화 전달에 적합한 짧은 형식으로 자동 재구성'},
+  change:{body:'30분 전 대비 주 확산 방향이 북동쪽으로 이동했고 A마을 예상 도달시간이 35분 단축되었습니다. 이에 따라 A마을 관련 임무의 우선순위가 ‘검토’에서 ‘즉시’로 변경되었습니다.',src:'이전 시점 예측 결과와 현재 결과의 차이 자동 비교'}
+};
+function openPanel(type,title){const c=contents[type]||contents.why;document.getElementById('drawerTitle').textContent=title;document.getElementById('drawerContent').textContent=c.body;document.getElementById('drawerSource').textContent=c.src;document.getElementById('drawer').classList.add('open')}
+function closePanel(){document.getElementById('drawer').classList.remove('open')}
+function openFirePopup(){document.getElementById('firePopup').classList.remove('hidden')}
+function closeFirePopup(){document.getElementById('firePopup').classList.add('hidden')}
+
+window.addEventListener('DOMContentLoaded',()=>{
+  ['layer-moisture','layer-slope','layer-canopy','layer-forestroad','layer-p8'].forEach(id=>setLayer(id,false));
+  initStaticMap();
+  openFirePopup();
+  initFirePopupDrag();
+  updatePredictionSummary();
+});
+
+
+function toggleAiChat(open){
+  const chat=document.getElementById('aiChat');
+  const fab=document.getElementById('aiFab');
+  if(!chat||!fab) return;
+  chat.classList.toggle('open',open);
+  fab.style.display=open?'none':'flex';
+}
+
+function appendAiMessage(type,text){
+  const body=document.getElementById('aiChatBody');
+  if(!body) return;
+  const div=document.createElement('div');
+  div.className='ai-msg '+type;
+  div.textContent=text;
+  body.appendChild(div);
+  body.scrollTop=body.scrollHeight;
+}
+
+function mockAiReply(q){
+  if(q.includes('먼저')||q.includes('우선')){
+    return '현재 목업 기준으로는 대피 명령 대상·순서·시점(E2), 진화 우선지역·보호대상 선정(S2), 대응단계 판단·격상 검토(S1)를 우선 확인하도록 제안합니다.';
+  }
+  if(q.includes('5시간')||q.includes('+5')){
+    return '+5시간 P5는 위험구역 판단에 사용하는 핵심 예측 범위입니다. 현재 화면에서는 P5에 포함되는 마을·주택·국가유산·주요시설을 함께 확인하도록 구성했습니다.';
+  }
+  if(q.includes('유관기관')||q.includes('요청')){
+    return '유관기관 협조는 S6에서 확인합니다. 소방·경찰·지자체·산림 지원기관의 역할과 현재 가용 자원을 지도 마커 팝업에서 확인한 뒤 필요한 지원을 요청하는 흐름입니다.';
+  }
+  return '현재 목업에서는 AI 답변을 시연용으로 구성했습니다. 실제 서비스에서는 선택한 대응 항목의 판정값·표준매뉴얼 근거·지도 데이터를 컨텍스트로 연결하는 방식으로 구현할 수 있습니다.';
+}
+
+function sendAiMessage(){
+  const input=document.getElementById('aiInput');
+  if(!input) return;
+  const q=input.value.trim();
+  if(!q) return;
+  appendAiMessage('user',q);
+  input.value='';
+  setTimeout(()=>appendAiMessage('bot',mockAiReply(q)),180);
+}
+
+function askQuick(q){
+  appendAiMessage('user',q);
+  setTimeout(()=>appendAiMessage('bot',mockAiReply(q)),180);
+}
+
+</script>
+
+<button class="ai-fab" id="aiFab" onclick="toggleAiChat(true)">✨ AI 어시스턴트</button>
+
+<div class="ai-chat" id="aiChat">
+  <div class="ai-chat-head">
+    <div>
+      <b>AI 대응 어시스턴트</b>
+      <span>현재 상황·확산예측·대응제안 기준</span>
+    </div>
+    <button onclick="toggleAiChat(false)">×</button>
+  </div>
+  <div class="ai-chat-body" id="aiChatBody">
+    <div class="ai-msg bot">
+      현재 표시된 산불 상황과 대응 제안을 바탕으로 질문할 수 있습니다.
+      <div class="ai-quick">
+        <button onclick="askQuick('지금 가장 먼저 해야 할 대응은?')">가장 먼저 할 대응</button>
+        <button onclick="askQuick('5시간 뒤 위험지역은?')">+5h 위험지역</button>
+        <button onclick="askQuick('유관기관에 무엇을 요청해야 해?')">유관기관 요청</button>
+      </div>
+    </div>
+  </div>
+  <div class="ai-chat-input">
+    <input id="aiInput" placeholder="대응 제안이나 근거를 질문하세요" onkeydown="if(event.key==='Enter')sendAiMessage()">
+    <button onclick="sendAiMessage()">전송</button>
+  </div>
+</div>
+
+</body>
+</html>
