@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>산불 대응 의사결정 제안서 — SC-1a 시안 (황승준)</title>
+<style>
+  :root {
+    --즉시:#c62828; --대기:#e65100; --협의:#1565c0; --요청:#6a1b9a; --보고:#00695c;
+    --부족:#616161; --없음:#9e9e9e;
+    --bg:#f4f5f7; --panel:#fff; --line:#dde1e6; --ink:#212121;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:'Apple SD Gothic Neo','Malgun Gothic',sans-serif; background:var(--bg); color:var(--ink); font-size:13px; height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+
+  /* ── 헤더 바 (출력 계약 헤더 1 + run 타임라인) ── */
+  header { background:#263238; color:#fff; padding:8px 14px; display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+  header .fire { font-size:16px; font-weight:700; }
+  header .meta span { margin-right:12px; opacity:.92; }
+  header .meta b { color:#ffcc80; }
+  .stage-badge { padding:2px 8px; border-radius:4px; font-weight:700; }
+  .stage-official { background:#455a64; }
+  .stage-rule { background:#c62828; }
+  /* 위험지수 카드 (지도 오버레이) */
+  .risk-card { position:absolute; top:10px; right:10px; z-index:10; background:#fff; border:1px solid var(--line); border-radius:8px; padding:8px 12px; cursor:pointer; box-shadow:0 2px 10px rgba(0,0,0,.18); min-width:150px; }
+  .risk-card:hover { box-shadow:0 4px 14px rgba(0,0,0,.28); }
+  .risk-card .rc-title { font-size:10.5px; color:#777; }
+  .risk-card .rc-num { font-size:26px; font-weight:800; line-height:1.1; }
+  .risk-card .rc-level { font-size:12px; font-weight:700; }
+  .risk-card .rc-scale { display:flex; height:7px; border-radius:4px; overflow:hidden; margin-top:5px; position:relative; }
+  .risk-card .rc-seg { height:100%; }
+  .risk-card .rc-marker { position:absolute; top:-3px; width:2px; height:13px; background:#212121; }
+  .risk-card .rc-hint { font-size:9.5px; color:#9e9e9e; margin-top:4px; text-decoration:underline dotted; }
+  .runbar { margin-left:auto; display:flex; align-items:center; gap:6px; }
+  .runbar .run { padding:3px 10px; border-radius:14px; background:#37474f; cursor:default; font-size:12px; }
+  .runbar .run.active { background:#0277bd; font-weight:700; }
+  .runbar button { padding:3px 10px; border-radius:14px; border:1px dashed #90a4ae; background:transparent; color:#b0bec5; cursor:pointer; font-size:12px; }
+  .runbar button:hover { color:#fff; border-color:#fff; }
+  .assump { font-size:11px; color:#90a4ae; width:100%; }
+
+  /* ── 2열 그리드: 좌 지도(크게)+입력 / 우 제안서 ── */
+  main { flex:1; display:grid; grid-template-columns:minmax(460px,46%) 1fr; gap:8px; padding:8px; min-height:0; }
+  .col { display:flex; flex-direction:column; gap:8px; min-height:0; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:8px; display:flex; flex-direction:column; min-height:0; }
+  .panel h2 { font-size:12px; padding:7px 10px; border-bottom:1px solid var(--line); background:#fafafa; border-radius:8px 8px 0 0; display:flex; justify-content:space-between; align-items:center; }
+  .panel .body { padding:8px 10px; overflow-y:auto; }
+
+  /* ── 지도 (좌열 대부분 차지) ── */
+  #map-panel { flex:1; }
+  #map-wrap { flex:1; min-height:0; display:flex; position:relative; }
+  #map-panel svg { width:100%; height:100%; display:block; }
+  .layers { display:flex; flex-wrap:wrap; gap:4px; padding:6px 10px; border-top:1px solid var(--line); }
+  .layers label { font-size:11px; display:flex; align-items:center; gap:3px; cursor:pointer; background:#f5f5f5; padding:2px 7px; border-radius:10px; }
+  .map-flash { animation:flash 1.2s ease-in-out 2; }
+  @keyframes flash { 50% { opacity:.15; } }
+
+  /* ── 입력 폼 (D 묶음) — 좌하단 플로팅 ── */
+  #input-fab { position:fixed; left:16px; bottom:16px; z-index:50; padding:10px 16px; border:none; border-radius:24px; background:#37474f; color:#fff; font-weight:700; font-size:13px; cursor:pointer; box-shadow:0 4px 14px rgba(0,0,0,.3); }
+  #input-fab.dirty { background:#e65100; }
+  #input-panel { position:fixed; left:16px; bottom:16px; z-index:55; width:400px; max-height:62vh; display:none; flex-direction:column; box-shadow:0 8px 30px rgba(0,0,0,.3); overflow-y:auto; }
+  #input-close { cursor:pointer; color:#777; }
+
+  /* ── 지원·협조처 패널 ── */
+  #support-fab { position:fixed; left:130px; bottom:16px; z-index:50; padding:10px 16px; border:none; border-radius:24px; background:#00695c; color:#fff; font-weight:700; font-size:13px; cursor:pointer; box-shadow:0 4px 14px rgba(0,0,0,.3); }
+  #support-panel { position:fixed; left:16px; bottom:16px; z-index:56; width:430px; max-height:66vh; display:none; flex-direction:column; box-shadow:0 8px 30px rgba(0,0,0,.3); }
+  #support-close { cursor:pointer; color:#777; }
+  .sup-sec { font-weight:800; font-size:12px; margin:6px 0 4px; }
+  .sup-sec.s { color:#c62828; } .sup-sec.e { color:#1565c0; }
+  .sup-row { border:1px solid var(--line); border-radius:6px; padding:6px 8px; margin-bottom:5px; font-size:12px; }
+  .sup-row b.org { font-size:12.5px; }
+  .sup-row .uc { display:inline-block; background:#eceff1; border-radius:8px; padding:0 6px; font-size:10.5px; font-weight:700; margin-left:3px; }
+  .sup-row .pg { color:#33691e; font-size:11px; }
+  .sup-row .ct { color:#0277bd; font-size:11px; }
+  #ly-fac g { cursor:pointer; }
+  #input-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:5px 8px; padding:8px 10px; }
+  #input-grid label { font-size:11px; color:#555; display:flex; flex-direction:column; gap:2px; }
+  #input-grid input, #input-grid select { padding:3px 5px; border:1px solid var(--line); border-radius:4px; font-size:12px; width:100%; }
+  #dirty-banner { display:none; margin:6px 10px; padding:6px 8px; background:#fff3e0; border:1px solid #ffb74d; border-radius:6px; font-size:11px; }
+  #dirty-banner button { margin-left:6px; padding:2px 8px; border:none; border-radius:4px; background:#e65100; color:#fff; cursor:pointer; }
+
+  /* ── 요약 바 (필터 겸용) ── */
+  #summary-bar { display:flex; gap:6px; flex-wrap:wrap; padding:8px 10px; background:var(--panel); border:1px solid var(--line); border-radius:8px; align-items:center; }
+  .chip { padding:3px 10px; border-radius:14px; color:#fff; font-weight:700; font-size:12px; cursor:pointer; opacity:.95; border:2px solid transparent; }
+  .chip small { font-weight:400; }
+  .chip.filter-on { border-color:#212121; }
+  #contract-check { margin-left:auto; font-size:11px; }
+
+  /* ── 제안서 14블록 ── */
+  #proposal { flex:1; }
+  .block { border:1px solid var(--line); border-radius:8px; margin-bottom:8px; background:#fff; }
+  .block.dimmed { opacity:.35; }
+  .block.none-block { background:#fafafa; }
+  .block-head { display:flex; align-items:center; gap:8px; padding:7px 10px; cursor:pointer; }
+  .block-head .cid { font-weight:800; font-size:14px; width:30px; }
+  .block-head .cid.s { color:#c62828; } .block-head .cid.e { color:#1565c0; }
+  .block-head .bname { font-weight:700; flex:1; }
+  .badge { padding:1px 8px; border-radius:10px; color:#fff; font-size:11px; font-weight:700; }
+  .block-body { border-top:1px dashed var(--line); padding:7px 10px; display:grid; grid-template-columns:44px 1fr; gap:4px 8px; font-size:12.5px; }
+  .block-body .lbl { color:#777; font-weight:700; }
+  .block-body .val.finding { color:#37474f; }
+  .block-body .val.text b.cite { color:#1565c0; cursor:pointer; }
+  .target-chip { display:inline-block; background:#eceff1; border-radius:10px; padding:1px 8px; margin:0 3px 2px 0; cursor:pointer; font-size:11.5px; }
+  .target-chip:hover { background:#cfd8dc; }
+  .conflict-val { color:#b71c1c; }
+  .ev { color:#1565c0; cursor:pointer; text-decoration:underline dotted; }
+  .muted { color:#9e9e9e; }
+
+  /* ── 근거 팝오버 (클릭한 자리에 표시) ── */
+  #ev-pop { position:fixed; z-index:60; width:340px; background:#fffde7; border:1px solid #c0ca33; border-radius:8px; box-shadow:0 6px 24px rgba(0,0,0,.25); padding:10px 12px; font-size:12px; display:none; }
+  #ev-pop .cid { font-family:monospace; font-size:11px; color:#33691e; }
+  #ev-pop .note { color:#9e9e9e; font-size:11px; margin-top:6px; }
+  #ev-pop .close { position:absolute; top:4px; right:8px; cursor:pointer; color:#777; font-size:14px; }
+
+</style>
+</head>
+<body>
+
+<header>
+  <span class="fire">🔥 산불 대응 의사결정 제안서</span>
+  <span class="meta" id="hdr-meta"></span>
+  <div class="runbar" id="runbar">
+    <span id="runs"></span>
+    <button id="new-p5">＋ 새 P5 수신 (시뮬)</button>
+  </div>
+  <span class="assump">시안 가정 — QnA 제외(기능 목록과 일치) · B: 갱신 = 새 P5 도착 이벤트(run 타임라인) · D 묶음 입력 = 시나리오 프리필 + 시연 중 변경 가능 · 데이터 = SC-1a(회의록 부록 C-2를 C-3 스키마로 변환) · 위험지수(1~100) = 지도 카드, 매뉴얼 정의 기반·값은 시나리오, 계약 추가 제안(불일치 #6)</span>
+</header>
+
+<main>
+  <!-- 좌: 큰 지도 + 접이식 입력 -->
+  <div class="col">
+    <div class="panel" id="map-panel">
+      <h2>상황도 (강릉시 옥계면 — 목업 지도) <small class="muted">t0+5h(P5) · +8h(P8) · 대상 칩 클릭 시 점멸</small></h2>
+      <div id="map-wrap">
+      <svg viewBox="0 0 400 310" preserveAspectRatio="xMidYMid meet" id="map">
+        <rect width="400" height="310" fill="#e8f0e3"/>
+        <!-- P8 잠재 위험구역 (불규칙 경계 + 발화점 후방 소폭 확산) -->
+        <polygon id="ly-p8" points="48,254 50,200 62,156 88,118 130,86 186,64 240,66 290,92 308,128 300,170 276,206 240,238 196,258 144,266 94,266" fill="#ffb74d" fill-opacity="0.25" stroke="#ef6c00" stroke-dasharray="5 3"/>
+        <!-- P5 위험구역 -->
+        <polygon id="ly-p5" points="54,250 58,208 74,170 104,142 150,120 196,112 236,124 252,150 240,186 214,214 170,238 118,252 78,256" fill="#e53935" fill-opacity="0.28" stroke="#c62828" stroke-width="1.5"/>
+        <!-- 등시선 (확산예측 슬라이스 P1·P3) -->
+        <g id="ly-iso">
+          <polygon points="62,242 64,220 78,204 98,200 116,212 118,228 104,244 80,248" fill="none" stroke="#c62828" stroke-width="1" stroke-dasharray="3 3" opacity="0.75"/>
+          <text x="118" y="240" font-size="8" fill="#c62828">t0+1h</text>
+          <polygon points="58,246 66,196 96,166 138,148 178,142 205,152 208,178 186,208 148,232 100,250" fill="none" stroke="#c62828" stroke-width="1" stroke-dasharray="3 3" opacity="0.75"/>
+          <text x="196" y="196" font-size="8" fill="#c62828">t0+3h</text>
+        </g>
+        <!-- 도로 -->
+        <g id="ly-road">
+          <polyline id="m-road415" points="138,182 190,215 250,235 340,200" fill="none" stroke="#f9a825" stroke-width="4" stroke-linecap="round" opacity="0.85"/>
+          <text x="252" y="250" font-size="9" fill="#795548">지방도 415호</text>
+        </g>
+        <!-- 송전선 -->
+        <g id="ly-power">
+          <line id="m-power" x1="98" y1="140" x2="268" y2="112" stroke="#6a1b9a" stroke-width="2" stroke-dasharray="7 4"/>
+          <text x="100" y="132" font-size="9" fill="#6a1b9a">⚡ 송전선</text>
+        </g>
+        <!-- 연소 구역(현재) / 화선 / 발화점 — 발화점은 후방 초점 근처, 뒤로도 소폭 연소 -->
+        <g id="ly-fire">
+          <polygon id="m-burned" points="70,236 72,221 80,211 92,207 102,213 106,224 100,235 88,241 76,242" fill="#6d1b1b" fill-opacity="0.6" stroke="#4e1010" stroke-width="0.8"/>
+          <path d="M 73,218 Q 88,201 105,220" fill="none" stroke="#ff1744" stroke-width="3.5" stroke-linecap="round"/>
+          <circle cx="84" cy="227" r="4" fill="#ffab00" stroke="#d50000" stroke-width="1.5"/>
+          <text x="30" y="262" font-size="9" fill="#b71c1c">▲발화점 · 연소구역 ≈8 ha</text>
+          <text x="104" y="204" font-size="9" fill="#ff1744" font-weight="bold">화선 F0</text>
+        </g>
+        <!-- 마을 -->
+        <g id="ly-town">
+          <g id="m-a마을"><circle cx="150" cy="172" r="7" fill="#c62828"/><text x="140" y="160" font-size="10" font-weight="bold">A마을</text><text x="136" y="192" font-size="8" fill="#555">2h·취약41</text></g>
+          <g id="m-b마을"><circle cx="212" cy="150" r="7" fill="#c62828"/><text x="203" y="138" font-size="10" font-weight="bold">B마을</text><text x="200" y="170" font-size="8" fill="#555">3h·취약9</text></g>
+          <g id="m-c마을"><circle cx="262" cy="105" r="7" fill="#ef6c00"/><text x="253" y="93" font-size="10" font-weight="bold">C마을</text><text x="250" y="125" font-size="8" fill="#555">7h·취약35</text></g>
+          <g id="m-주택군"><circle cx="163" cy="185" r="2" fill="#4e342e"/><circle cx="170" cy="179" r="2" fill="#4e342e"/><circle cx="158" cy="192" r="2" fill="#4e342e"/><circle cx="168" cy="190" r="2" fill="#4e342e"/><text x="172" y="197" font-size="8" fill="#4e342e">주택 15동</text></g>
+        </g>
+        <!-- 시설 -->
+        <g id="ly-fac">
+          <g id="m-옥계초"><rect x="345" y="182" width="12" height="12" fill="#2e7d32"/><text x="300" y="178" font-size="10" font-weight="bold" fill="#2e7d32">🏫 대피소 옥계초등학교 (78/300)</text></g>
+          <g id="m-면사무소"><rect x="325" y="248" width="12" height="12" fill="#2e7d32"/><text x="272" y="272" font-size="10" font-weight="bold" fill="#2e7d32">🏛 대피소 옥계면사무소 (30/150)</text></g>
+          <g id="m-소방서"><rect x="34" y="278" width="12" height="12" fill="#c62828"/><text x="50" y="288" font-size="10" font-weight="bold" fill="#c62828">🚒 옥계119안전센터</text></g>
+          <g id="m-파출소"><rect x="364" y="232" width="12" height="12" fill="#1565c0"/><text x="290" y="230" font-size="10" font-weight="bold" fill="#1565c0">🚓 옥계파출소</text></g>
+          <g id="m-산단"><rect x="360" y="126" width="13" height="13" fill="#5d4037"/><text x="270" y="150" font-size="10" font-weight="bold" fill="#5d4037">🏭 한라시멘트·옥계산단</text></g>
+          <g id="m-요양원"><rect x="330" y="60" width="12" height="12" fill="#7b1fa2"/><text x="288" y="56" font-size="10" font-weight="bold" fill="#7b1fa2">🏥 요양시설(취약)</text></g>
+        </g>
+        <!-- 대피 지원 거점 (4갈래: 수송/구조/통제/시설이송) -->
+        <g id="ly-help" font-size="7.5" fill="#00838f" font-weight="bold">
+          <circle cx="331" cy="254" r="12" fill="none" stroke="#00838f" stroke-width="1.3" stroke-dasharray="3 2"/><text x="288" y="288">🚌 수송·1:1담당제</text>
+          <circle cx="40" cy="284" r="12" fill="none" stroke="#00838f" stroke-width="1.3" stroke-dasharray="3 2"/><text x="50" y="300">🚑 구조·구급</text>
+          <circle cx="370" cy="238" r="12" fill="none" stroke="#00838f" stroke-width="1.3" stroke-dasharray="3 2"/><text x="322" y="222">🚓 통제·지원</text>
+          <circle cx="336" cy="66" r="12" fill="none" stroke="#00838f" stroke-width="1.3" stroke-dasharray="3 2"/><text x="300" y="86">🏥 시설 이송</text>
+        </g>
+        <!-- 범례 -->
+        <g font-size="7" fill="#555">
+          <rect x="8" y="8" width="242" height="46" fill="#fff" opacity="0.82" rx="3"/>
+          <rect x="13" y="12" width="8" height="6" fill="#6d1b1b" fill-opacity="0.6"/><text x="24" y="18">연소구역(현재)</text>
+          <rect x="13" y="22" width="8" height="6" fill="#e53935" fill-opacity="0.28" stroke="#c62828"/><text x="24" y="28">P5 (≤5h 즉시)</text>
+          <rect x="13" y="32" width="8" height="6" fill="#ffb74d" fill-opacity="0.25" stroke="#ef6c00" stroke-dasharray="2 2"/><text x="24" y="38">P8 (≤8h 대기)</text>
+          <line x1="90" y1="15" x2="98" y2="15" stroke="#c62828" stroke-width="1" stroke-dasharray="3 2"/><text x="101" y="18">등시선 1·3h</text>
+          <rect x="90" y="22" width="8" height="6" fill="#2e7d32"/><text x="101" y="28">대피소(안전)</text>
+          <rect x="90" y="32" width="8" height="6" fill="#c62828"/><text x="101" y="38">소방서</text>
+          <rect x="162" y="12" width="8" height="6" fill="#1565c0"/><text x="173" y="18">경찰(요청처)</text>
+          <rect x="162" y="22" width="8" height="6" fill="#5d4037"/><text x="173" y="28">기간산업</text>
+          <circle cx="166" cy="35" r="4" fill="none" stroke="#00838f" stroke-width="1.2" stroke-dasharray="2 1.5"/><text x="173" y="38" fill="#00838f">대피지원 거점</text>
+          <rect x="90" y="41" width="8" height="6" fill="#7b1fa2"/><text x="101" y="47">취약시설</text>
+        </g>
+      </svg>
+      </div>
+      <div class="layers" id="layer-toggles">
+        <label><input type="checkbox" data-ly="ly-p5" checked>P5</label>
+        <label><input type="checkbox" data-ly="ly-p8" checked>P8</label>
+        <label><input type="checkbox" data-ly="ly-iso" checked>등시선</label>
+        <label><input type="checkbox" data-ly="ly-fire" checked>연소구역·화선</label>
+        <label><input type="checkbox" data-ly="ly-town" checked>마을</label>
+        <label><input type="checkbox" data-ly="ly-fac" checked>시설</label>
+        <label><input type="checkbox" data-ly="ly-help" checked>대피지원 거점</label>
+        <label><input type="checkbox" data-ly="ly-road" checked>도로</label>
+        <label><input type="checkbox" data-ly="ly-power" checked>송전선</label>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- 우: 요약 + 제안서 -->
+  <div class="col">
+    <div id="summary-bar"></div>
+    <div class="panel" id="proposal">
+      <h2>의사결정 제안서 — 14개 항목 (S1~S7 진화 · E1~E7 대피, 순서 고정) <small class="muted">블록 클릭 = 접기 · 근거 [k] 클릭 = 원문 팝업</small></h2>
+      <div class="body" id="blocks"></div>
+    </div>
+  </div>
+</main>
+
+<!-- 현장·상황실 입력 (D 묶음) — 좌하단 플로팅 -->
+<button id="input-fab">📋 상황 입력</button>
+
+<!-- 지원·협조처 (매뉴얼 유관기관 체계) — 좌하단 플로팅 -->
+<button id="support-fab">🤝 지원·협조처</button>
+<div class="panel" id="support-panel">
+  <h2>지원·협조처 — 어디서 도움을 받는가 <span id="support-close">✕</span></h2>
+  <div class="body" id="support-body"></div>
+</div>
+<div class="panel" id="input-panel">
+      <h2>현장·상황실 입력 (정보 사전 D 묶음) <span id="input-close">✕</span></h2>
+      <div id="dirty-banner">⚠ 입력이 변경되었습니다 — 제안서 재생성 필요 <button id="regen">재생성</button></div>
+      <div id="input-grid">
+        <label>보유 헬기<input type="number" value="3" data-d></label>
+        <label>투입 헬기<input type="number" value="2" data-d></label>
+        <label>투입 지상인력<input type="number" value="12" data-d></label>
+        <label>현재 피해면적(ha)<input type="number" value="8" data-d></label>
+        <label>화선 길이(km)<input type="number" value="1.2" step="0.1" data-d></label>
+        <label>진화율(%)<input type="number" value="10" data-d></label>
+        <label>예상 진화시간<input type="text" placeholder="미입력" data-d></label>
+        <label>공식 대응단계<select data-d><option selected>초기대응</option><option>확산대응 1단계</option><option>확산대응 2단계</option><option>확산대응 3단계</option></select></label>
+        <label>대피명령 상태<select data-d><option selected>미발령</option><option>권고</option><option>명령</option></select></label>
+        <label>재난문자 송출 이력<select data-d><option selected>없음</option><option>발생 안내</option><option>대피 권고</option><option>대피 명령</option></select></label>
+        <label>미대피·부상 보고<input type="text" value="없음" data-d></label>
+        <label>인접기관 가용 자원<input type="text" value="시나리오값" data-d></label>
+      </div>
+</div>
+
+<!-- 근거 팝오버 (클릭 위치에 표시) -->
+<div id="ev-pop"><span class="close" id="ev-close">✕</span><div id="ev-content"></div></div>
+
+<script src="sc-1a.js"></script>
+<script>
+const D = window.SC1A;
+const TOKENS = ["즉시","대기","협의","요청","보고","근거 부족","정보 부족","생성 실패","(없음)"];
+const COLOR = {"즉시":"var(--즉시)","대기":"var(--대기)","협의":"var(--협의)","요청":"var(--요청)","보고":"var(--보고)","근거 부족":"var(--부족)","정보 부족":"var(--부족)","생성 실패":"#000","(없음)":"var(--없음)"};
+const MAP_REF = {"A마을":"m-a마을","B마을":"m-b마을","C마을":"m-c마을","송전선":"m-power","주택군":"m-주택군","옥계초등학교":"m-옥계초","옥계면사무소":"m-면사무소","지방도 415호":"m-road415","경찰":"m-파출소","옥계면":"ly-town","북동 구역":"ly-p5"};
+
+function esc(s){ return String(s).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+function fmtT0(t0){ return t0.replace("T"," ").slice(0,16); }
+
+/* ── 근거 팝오버: 클릭한 자리에 표시 ── */
+const pop = document.getElementById("ev-pop");
+function showPop(html, ev){
+  document.getElementById("ev-content").innerHTML = html;
+  pop.style.display = "block";
+  const w = pop.offsetWidth, h = pop.offsetHeight;
+  let x = ev.clientX + 10, y = ev.clientY + 10;
+  if (x + w > innerWidth - 8)  x = ev.clientX - w - 10;
+  if (y + h > innerHeight - 8) y = Math.max(8, ev.clientY - h - 10);
+  pop.style.left = x + "px"; pop.style.top = y + "px";
+}
+document.getElementById("ev-close").onclick = ()=> pop.style.display = "none";
+document.addEventListener("click", e=>{
+  if (pop.style.display==="block" && !pop.contains(e.target) && !e.target.closest(".cite,.ev,.risk-card")) pop.style.display = "none";
+});
+
+/* ── 헤더 ── */
+function renderHeader(){
+  document.getElementById("hdr-meta").innerHTML =
+    `<span>기준시각 <b>${fmtT0(D.header.t0)}</b></span>` +
+    `<span>통합지휘권자 <b>${esc(D.header.position)}</b></span>` +
+    `<span class="stage-badge stage-official">공식 ${esc(D.header.official_stage)}</span>` +
+    `<span class="stage-badge stage-rule">규칙 판정 ${esc(D.header.recommended_stage)}</span>` +
+    `<span>시나리오 <b>${esc(D.header.scenario_id)}</b></span>`;
+  document.getElementById("runs").innerHTML =
+    runHistory.map((r,i)=>`<span class="run ${i===runHistory.length-1?"active":""}">${r}</span>`).join(" ");
+}
+
+/* ── 산불위험지수 카드 (지도 오버레이 — 매뉴얼 p.13~14 정의: 1~100 지수) ── */
+const BAND_COLOR = {"낮음":"#66bb6a","다소높음":"#fdd835","높음":"#fb8c00","매우높음":"#e53935"};
+function renderRiskCard(){
+  const old = document.querySelector(".risk-card"); if(old) old.remove();
+  if(!D.risk || D.risk.index == null) return;
+  const r = D.risk;
+  const color = BAND_COLOR[r.level] || "#607d8b";
+  const segs = r.bands.map(b=>{
+    const w = (b.max - b.min + 1);
+    return `<span class="rc-seg" style="width:${w}%;background:${BAND_COLOR[b.level]}" title="${b.level} ${b.min}~${b.max}"></span>`;
+  }).join("");
+  const card = document.createElement("div");
+  card.className = "risk-card";
+  card.title = "클릭: 위험지수 정의·기준 근거";
+  card.innerHTML = `
+    <div class="rc-title">산불위험지수 <span style="color:#bbb">(${esc(r.scale)})</span></div>
+    <span class="rc-num" style="color:${color}">${r.index}</span>
+    <span class="rc-level" style="color:${color}">${esc(r.level)}</span>
+    <div class="rc-scale">${segs}<span class="rc-marker" style="left:${r.index}%"></span></div>
+    <div class="rc-hint">근거 보기</div>`;
+  card.onclick = ev=>{
+    ev.stopPropagation();
+    const factors = (r.factors||[]).map(f=>`· ${esc(f.name)}: <b>${esc(f.value)}</b>`).join("<br>");
+    showPop(`<b>산불위험지수 ${r.index} 「${esc(r.level)}」 — 왜 이 점수인가</b><br><br>` +
+      `<b>산정 요인 (지수의 입력 — 가연물질·기상 상태)</b><br>${factors}<br><br>` +
+      `<b>출처</b><br>` +
+      r.evidence.map(e=>`📄 ${esc(e.doc)} ${esc(e.page)} § ${esc(e.section)} <span class="cid">${esc(e.chunk_id)}</span>`).join("<br>") +
+      `<div class="note">※ ${esc(r.basis)}</div>`, ev);
+  };
+  document.getElementById("map-wrap").appendChild(card);
+}
+let runHistory = [ `${D.header.run_id} · ${fmtT0(D.header.t0).slice(11)}` ];
+
+/* ── 요약 바: items에서 직접 집계 → 계약 검증 겸용 ── */
+function computeSummary(){
+  const c = Object.fromEntries(TOKENS.map(t=>[t,0]));
+  D.items.forEach(it => it.status.forEach(s => { if(s in c) c[s]++; }));
+  return c;
+}
+let activeFilter = null;
+function renderSummary(){
+  const c = computeSummary();
+  const declared = D.summary;
+  const keyMap = {"(없음)":"없음"};
+  let mismatch = [];
+  TOKENS.forEach(t=>{ const dk = keyMap[t]||t; if(declared[dk]!==undefined && declared[dk]!==c[t]) mismatch.push(t); });
+  const bar = document.getElementById("summary-bar");
+  bar.innerHTML = TOKENS.filter(t=>t!=="생성 실패").map(t=>
+    `<span class="chip ${activeFilter===t?"filter-on":""}" data-tok="${t}" style="background:${COLOR[t]}">${t} <small>${c[t]}</small></span>`
+  ).join("") +
+  `<span id="contract-check">${mismatch.length? "⚠ 요약 불일치: "+mismatch.join(","): "✓ 요약=본문 집계 일치"} · 블록 ${D.items.length}/14</span>`;
+  bar.querySelectorAll(".chip").forEach(ch => ch.onclick = ()=>{
+    activeFilter = (activeFilter===ch.dataset.tok)? null : ch.dataset.tok;
+    renderSummary(); applyFilter();
+  });
+}
+function applyFilter(){
+  document.querySelectorAll(".block").forEach(b=>{
+    const toks = JSON.parse(b.dataset.status);
+    b.classList.toggle("dimmed", !!activeFilter && !toks.includes(activeFilter));
+  });
+}
+
+/* ── 14블록 ── */
+function line(lbl, valHtml){ return `<div class="lbl">${lbl}</div><div class="val ${lbl==='판정'?'finding':lbl==='제안'?'text':''}">${valHtml}</div>`; }
+function renderBlocks(){
+  const root = document.getElementById("blocks");
+  root.innerHTML = D.items.map(it=>{
+    const isNone = it.status.length===1 && it.status[0]==="(없음)";
+    const badges = it.status.map(s=>`<span class="badge" style="background:${COLOR[s]||'#607d8b'}">${s}</span>`).join(" ");
+    const textHtml = it.text==="(없음)" ? `<span class="muted">(없음)</span>`
+      : esc(it.text).replace(/\[(\d+)\]/g, (m,k)=>`<b class="cite" data-item="${it.catalog_id}" data-k="${k}">[${k}]</b>`);
+    const targetsHtml = it.targets.length
+      ? it.targets.map(t=>`<span class="target-chip" data-target="${esc(t)}">${esc(t)}</span>`).join("")
+      : `<span class="muted">(없음)</span>`;
+    const confHtml = it.conflicts.length
+      ? it.conflicts.map(c=>`<span class="conflict-val">${esc(c.type)}(관련 ${esc(c.with)}) / 처리 방향: ${esc(c.resolution)}</span>`).join(" · ")
+      : `<span class="muted">(없음)</span>`;
+    const evHtml = it.evidence.length
+      ? it.evidence.map(e=>`<span class="ev" data-item="${it.catalog_id}" data-k="${e.k}">[${e.k}] ${esc(e.doc)} ${esc(e.page)} ${esc(e.section)} (${esc(e.chunk_id)})</span>`).join(" / ")
+      : `<span class="muted">(없음)</span>`;
+    return `<div class="block ${isNone?"none-block":""}" data-cid="${it.catalog_id}" data-status='${JSON.stringify(it.status)}'>
+      <div class="block-head">
+        <span class="cid ${it.catalog_id[0]==="S"?"s":"e"}">${it.catalog_id}</span>
+        <span class="bname">${esc(it.name)}</span>${badges}
+        <span class="muted">${isNone?"▸":"▾"}</span>
+      </div>
+      <div class="block-body" style="${isNone?"display:none":""}">
+        ${line("판정", esc(it.finding))}
+        ${line("구분", it.status.map(s=>esc(s)).join(" / "))}
+        ${line("제안", textHtml)}
+        ${line("대상", targetsHtml)}
+        ${line("충돌", confHtml)}
+        ${line("근거", evHtml)}
+      </div>
+    </div>`;
+  }).join("");
+
+  root.querySelectorAll(".block-head").forEach(h => h.onclick = ()=>{
+    const body = h.nextElementSibling;
+    const open = body.style.display !== "none";
+    body.style.display = open ? "none" : "";
+    h.querySelector(".muted:last-child").textContent = open ? "▸" : "▾";
+  });
+  root.querySelectorAll(".cite, .ev").forEach(el => el.onclick = ev=>{
+    ev.stopPropagation(); showEvidence(el.dataset.item, +el.dataset.k, ev);
+  });
+  root.querySelectorAll(".target-chip").forEach(el => el.onclick = ev=>{
+    ev.stopPropagation(); flashMap(el.dataset.target);
+  });
+}
+
+/* ── 근거 표시 (UC-C03) — 클릭한 자리에 팝오버 ── */
+function showEvidence(cid, k, ev){
+  const it = D.items.find(i=>i.catalog_id===cid);
+  const e = it.evidence.find(e=>e.k===k);
+  if(!e) return;
+  showPop(`<b>${esc(it.catalog_id)} ${esc(it.name)} — 근거 [${k}]</b><br><br>` +
+    `📄 <b>${esc(e.doc)}</b> ${esc(e.page)}<br>§ ${esc(e.section)}<br><span class="cid">${esc(e.chunk_id)}</span>` +
+    `<div class="note">※ 원문 발췌 표시는 프로토타입 단계에서 청크 DB 연결 후 구현 (UC-C03)</div>`, ev);
+}
+
+/* ── 지도 상호작용 ── */
+function flashMap(target){
+  const key = Object.keys(MAP_REF).find(k=>target.includes(k));
+  if(!key) return;
+  const el = document.getElementById(MAP_REF[key]);
+  if(el){ el.classList.remove("map-flash"); void el.getBoundingClientRect(); el.classList.add("map-flash"); }
+}
+document.querySelectorAll("#layer-toggles input").forEach(cb => cb.onchange = ()=>{
+  document.getElementById(cb.dataset.ly).style.display = cb.checked ? "" : "none";
+});
+
+/* ── D 묶음 입력: 플로팅 토글 + 재생성 필요 배너 (가정 B) ── */
+const inputPanel = document.getElementById("input-panel"), inputFab = document.getElementById("input-fab");
+inputFab.onclick = ()=>{ inputPanel.style.display = "flex"; inputFab.style.display = "none"; };
+document.getElementById("input-close").onclick = ()=>{ inputPanel.style.display = "none"; inputFab.style.display = "block"; };
+document.querySelectorAll("[data-d]").forEach(el => el.onchange = ()=>{
+  document.getElementById("dirty-banner").style.display = "block";
+  inputFab.classList.add("dirty"); inputFab.textContent = "📋 상황 입력 ⚠";
+});
+document.getElementById("regen").onclick = ()=> newRun("입력 변경");
+document.getElementById("new-p5").onclick = ()=> newRun("새 P5 도착");
+
+function newRun(reason){
+  const n = runHistory.length + 1;
+  const t = new Date(new Date(D.header.t0).getTime() + (n-1)*3600e3);
+  D.header.run_id = "run-" + String(n).padStart(3,"0");
+  D.header.t0 = t.toISOString().slice(0,16).replace("Z","");
+  runHistory.push(`${D.header.run_id} · ${String(t.getHours()).padStart(2,"0")}:00`);
+  document.getElementById("dirty-banner").style.display = "none";
+  inputFab.classList.remove("dirty"); inputFab.textContent = "📋 상황 입력";
+  renderHeader();
+  alert(`[시뮬레이션] ${reason} → 제안서 재생성 (${D.header.run_id})\n프로토타입에서는 규칙엔진·RAG가 재실행됩니다. 시안에서는 동일 데이터를 다시 렌더링합니다.`);
+  renderBlocks(); renderSummary(); applyFilter();
+}
+
+/* ── 시설 마커 클릭 → 실명·주소 팝오버 ── */
+(D.facilities||[]).forEach(f=>{
+  const el = document.getElementById(f.id);
+  if(!el) return;
+  el.addEventListener("click", ev=>{
+    ev.stopPropagation();
+    showPop(`<b>${esc(f.name)}</b><br>${esc(f.role)}<br><br>📍 ${esc(f.addr)}` +
+      (f.tel? `<br>☎ ${esc(f.tel)}` : "") +
+      (f.note? `<div class="note">※ ${esc(f.note)}</div>` : ""), ev);
+  });
+});
+
+/* ── 지원·협조처 패널 (매뉴얼 유관기관 체계) ── */
+function supRow(r){
+  return `<div class="sup-row"><b class="org">${esc(r.org)}</b>${r.items.map(i=>`<span class="uc">${i}</span>`).join("")}<br>` +
+    `${esc(r.what)}<br><span class="pg">근거 ${esc(r.page)}</span>` +
+    (r.contact? ` · <span class="ct">☎ ${esc(r.contact)}</span>` : "") + `</div>`;
+}
+function renderSupport(){
+  if(!D.support) return;
+  document.getElementById("support-body").innerHTML =
+    `<div class="sup-sec s">🔥 진화할 때 — 동원·협조 (통합지휘본부장 권한: 직접 동원 + 요청)</div>` +
+    D.support.suppression.map(supRow).join("") +
+    `<div class="sup-sec e">🏃 대피시킬 때 — 지원·요청</div>` +
+    D.support.evacuation.map(supRow).join("") +
+    `<div class="note" style="font-size:11px;color:#9e9e9e;margin-top:4px">※ 연락처는 시연용 실제 공개 번호. 항목 태그(S/E)를 누르면 제안서 해당 블록과 연결 예정(프로토타입)</div>`;
+}
+const supPanel = document.getElementById("support-panel"), supFab = document.getElementById("support-fab");
+supFab.onclick = ()=>{ supPanel.style.display = "flex"; };
+document.getElementById("support-close").onclick = ()=>{ supPanel.style.display = "none"; };
+
+renderHeader(); renderRiskCard(); renderSummary(); renderBlocks(); renderSupport();
+</script>
+</body>
+</html>

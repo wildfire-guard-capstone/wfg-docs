@@ -1,0 +1,147 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 950" font-family="'Apple SD Gothic Neo','Malgun Gothic',sans-serif">
+  <defs>
+    <marker id="arr" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+      <path d="M0,0 L10,4 L0,8 z" fill="#555"/>
+    </marker>
+  </defs>
+  <rect width="1500" height="950" fill="#fafafa"/>
+
+  <!-- ══ 시스템 경계 ══ -->
+  <rect x="270" y="75" width="1010" height="700" rx="14" fill="#fff" stroke="#37474f" stroke-width="2.5"/>
+  <text x="295" y="760" font-size="20" font-weight="bold" fill="#37474f">System — 산불 대응 의사결정 지원</text>
+
+  <!-- ── 그룹: 입력 (green) ── -->
+  <rect x="295" y="130" width="270" height="115" rx="10" fill="#e8f5e9" fill-opacity="0.55" stroke="#2e7d32" stroke-dasharray="6 4"/>
+  <text x="305" y="150" font-size="12" font-weight="bold" fill="#2e7d32">UC-INPUT</text>
+  <ellipse cx="430" cy="197" rx="115" ry="30" fill="#fff" stroke="#2e7d32" stroke-width="1.8"/>
+  <text x="430" y="192" font-size="13.5" text-anchor="middle" font-weight="bold">UC-01</text>
+  <text x="430" y="209" font-size="13" text-anchor="middle">상황 정보 입력 (D 묶음)</text>
+
+  <!-- ── 그룹: 생성 (blue) ── -->
+  <rect x="295" y="285" width="310" height="300" rx="10" fill="#e3f2fd" fill-opacity="0.55" stroke="#1565c0" stroke-dasharray="6 4"/>
+  <text x="305" y="305" font-size="12" font-weight="bold" fill="#1565c0">UC-GEN (규칙엔진+RAG)</text>
+  <ellipse cx="450" cy="355" rx="120" ry="30" fill="#fff" stroke="#1565c0" stroke-width="1.8"/>
+  <text x="450" y="350" font-size="13.5" text-anchor="middle" font-weight="bold">UC-02</text>
+  <text x="450" y="367" font-size="13" text-anchor="middle">제안서 생성 / 갱신 (run)</text>
+  <ellipse cx="450" cy="450" rx="115" ry="27" fill="#fff" stroke="#1565c0" stroke-width="1.4" stroke-dasharray="4 3"/>
+  <text x="450" y="447" font-size="12.5" text-anchor="middle">잠재 위험구역 산출</text>
+  <text x="450" y="462" font-size="11.5" text-anchor="middle" fill="#777">(P8 수신 시)</text>
+  <rect x="318" y="500" width="264" height="60" rx="6" fill="#fffde7" stroke="#c0ca33"/>
+  <text x="450" y="524" font-size="12" text-anchor="middle">📋 FR-C1~C5 + FR-S01~E07 (14항목)</text>
+  <text x="450" y="543" font-size="11.5" text-anchor="middle" fill="#777">= UC-02의 내부 규칙 (별도 FR 표)</text>
+
+  <!-- ── 그룹: 열람 (purple) ── -->
+  <rect x="660" y="130" width="590" height="230" rx="10" fill="#f3e5f5" fill-opacity="0.55" stroke="#6a1b9a" stroke-dasharray="6 4"/>
+  <text x="670" y="150" font-size="12" font-weight="bold" fill="#6a1b9a">UC-VIEW (통합지휘권자 조회)</text>
+  <ellipse cx="800" cy="200" rx="110" ry="29" fill="#fff" stroke="#6a1b9a" stroke-width="1.8"/>
+  <text x="800" y="195" font-size="13.5" text-anchor="middle" font-weight="bold">UC-03</text>
+  <text x="800" y="212" font-size="13" text-anchor="middle">제안서 열람 (14블록)</text>
+  <ellipse cx="1090" cy="200" rx="105" ry="29" fill="#fff" stroke="#6a1b9a" stroke-width="1.8"/>
+  <text x="1090" y="195" font-size="13.5" text-anchor="middle" font-weight="bold">UC-05</text>
+  <text x="1090" y="212" font-size="13" text-anchor="middle">상황도 조회 (지도)</text>
+  <ellipse cx="800" cy="300" rx="110" ry="29" fill="#fff" stroke="#6a1b9a" stroke-width="1.8"/>
+  <text x="800" y="295" font-size="13.5" text-anchor="middle" font-weight="bold">UC-06</text>
+  <text x="800" y="312" font-size="13" text-anchor="middle">산불위험지수 확인</text>
+  <ellipse cx="1090" cy="300" rx="105" ry="29" fill="#fff" stroke="#6a1b9a" stroke-width="1.8"/>
+  <text x="1090" y="295" font-size="13.5" text-anchor="middle" font-weight="bold">UC-07</text>
+  <text x="1090" y="312" font-size="13" text-anchor="middle">지원·협조처 조회</text>
+
+  <!-- ── 그룹: 공통 (gray) ── -->
+  <rect x="740" y="420" width="380" height="105" rx="10" fill="#f5f5f5" stroke="#616161" stroke-dasharray="6 4"/>
+  <text x="750" y="440" font-size="12" font-weight="bold" fill="#616161">UC-COMMON</text>
+  <ellipse cx="930" cy="482" rx="130" ry="28" fill="#fff" stroke="#616161" stroke-width="1.8"/>
+  <text x="930" y="477" font-size="13.5" text-anchor="middle" font-weight="bold">UC-04</text>
+  <text x="930" y="494" font-size="13" text-anchor="middle">근거 원문 조회 ([k] → 매뉴얼)</text>
+
+  <!-- ── 그룹: 평시 관리 (red, MVP 제외) ── -->
+  <rect x="660" y="600" width="590" height="130" rx="10" fill="#ffebee" fill-opacity="0.6" stroke="#c62828" stroke-dasharray="6 4"/>
+  <text x="670" y="620" font-size="12" font-weight="bold" fill="#c62828">UC-ADMIN (평시)</text>
+  <ellipse cx="820" cy="675" rx="105" ry="27" fill="#fff" stroke="#c62828" stroke-width="1.8"/>
+  <text x="820" y="670" font-size="12.5" text-anchor="middle" font-weight="bold">UC-08</text>
+  <text x="820" y="686" font-size="12.5" text-anchor="middle">계정·권한 관리</text>
+  <ellipse cx="1090" cy="675" rx="115" ry="27" fill="#fff" stroke="#c62828" stroke-width="1.8"/>
+  <text x="1090" y="670" font-size="12.5" text-anchor="middle" font-weight="bold">UC-09</text>
+  <text x="1090" y="686" font-size="12.5" text-anchor="middle">자원 마스터·기초 데이터 관리</text>
+
+  <!-- ══ 액터: 통합지휘권자 (좌) ══ -->
+  <g stroke="#212121" stroke-width="2.5" fill="none">
+    <circle cx="120" cy="330" r="16" fill="#fff"/>
+    <line x1="120" y1="346" x2="120" y2="395"/>
+    <line x1="93" y1="365" x2="147" y2="365"/>
+    <line x1="120" y1="395" x2="98" y2="430"/>
+    <line x1="120" y1="395" x2="142" y2="430"/>
+  </g>
+  <text x="120" y="452" font-size="15" font-weight="bold" text-anchor="middle">통합지휘권자</text>
+  <text x="120" y="470" font-size="11.5" text-anchor="middle" fill="#777">MVP: 시장·군수·구청장</text>
+  <text x="120" y="484" font-size="11.5" text-anchor="middle" fill="#777">(규모 따라 시·도지사→산림청장)</text>
+
+  <!-- ══ 액터: 관리자 (우하) ══ -->
+  <g stroke="#212121" stroke-width="2.5" fill="none">
+    <circle cx="1400" cy="620" r="16" fill="#fff"/>
+    <line x1="1400" y1="636" x2="1400" y2="685"/>
+    <line x1="1373" y1="655" x2="1427" y2="655"/>
+    <line x1="1400" y1="685" x2="1378" y2="720"/>
+    <line x1="1400" y1="685" x2="1422" y2="720"/>
+  </g>
+  <text x="1400" y="742" font-size="15" font-weight="bold" text-anchor="middle">관리자</text>
+  <text x="1400" y="759" font-size="11.5" text-anchor="middle" fill="#777">(평시 운영)</text>
+
+  <!-- ══ 외부 시스템 (좌하) ══ -->
+  <rect x="45" y="560" width="185" height="56" rx="4" fill="#fff" stroke="#37474f" stroke-width="1.8"/>
+  <text x="137" y="583" font-size="13.5" text-anchor="middle" font-weight="bold">확산예측 모듈</text>
+  <text x="137" y="601" font-size="11.5" text-anchor="middle" fill="#777">산림청·국립산림과학원 (p.28·32)</text>
+  <rect x="45" y="650" width="185" height="56" rx="4" fill="#fff" stroke="#37474f" stroke-width="1.8"/>
+  <text x="137" y="673" font-size="13" text-anchor="middle" font-weight="bold">기상청 API · NIFOS</text>
+  <text x="137" y="691" font-size="12" text-anchor="middle">· 공공데이터</text>
+
+  <!-- ══ Association (실선) ══ -->
+  <g stroke="#555" stroke-width="1.4" fill="none">
+    <line x1="150" y1="350" x2="318" y2="212"/>   <!-- 지휘권자-01 -->
+    <line x1="152" y1="370" x2="332" y2="360"/>   <!-- 지휘권자-02(수동) -->
+    <line x1="150" y1="345" x2="692" y2="192"/>   <!-- 지휘권자-03 -->
+    <line x1="152" y1="340" x2="987" y2="182"/>   <!-- 지휘권자-05 -->
+    <line x1="152" y1="360" x2="692" y2="292"/>   <!-- 지휘권자-06 -->
+    <line x1="152" y1="355" x2="986" y2="286"/>   <!-- 지휘권자-07 -->
+    <line x1="185" y1="575" x2="332" y2="372"/>   <!-- 예측모듈-02 -->
+    <line x1="205" y1="650" x2="340" y2="380"/>   <!-- 기상·데이터-02 -->
+    <line x1="230" y1="668" x2="691" y2="308"/>   <!-- NIFOS-06 -->
+    <line x1="1374" y1="650" x2="923" y2="670"/>  <!-- 관리자-계정 -->
+    <line x1="1376" y1="662" x2="1204" y2="673"/> <!-- 관리자-자원DB -->
+  </g>
+
+  <!-- ══ include / extend (점선 화살표) ══ -->
+  <g stroke="#555" stroke-width="1.4" stroke-dasharray="6 4" fill="none">
+    <line x1="822" y1="229" x2="905" y2="455" marker-end="url(#arr)"/>
+    <line x1="1075" y1="229" x2="955" y2="455" marker-end="url(#arr)"/>
+    <line x1="835" y1="328" x2="900" y2="456" marker-end="url(#arr)"/>
+    <line x1="1065" y1="328" x2="962" y2="458" marker-end="url(#arr)"/>
+    <line x1="450" y1="423" x2="450" y2="387" marker-end="url(#arr)"/>
+  </g>
+  <g font-size="11" fill="#555" font-style="italic">
+    <text x="838" y="345" transform="rotate(66 838 345)">«include»</text>
+    <text x="1030" y="350" transform="rotate(-63 1030 350)">«include»</text>
+    <text x="852" y="396" transform="rotate(60 852 396)">«include»</text>
+    <text x="1030" y="405" transform="rotate(-55 1030 405)">«include»</text>
+    <text x="458" y="410">«extend»</text>
+  </g>
+
+  <!-- ══ 범례 ══ -->
+  <rect x="280" y="800" width="600" height="122" rx="8" fill="#fff" stroke="#ccc"/>
+  <g font-size="12.5">
+    <ellipse cx="310" cy="825" rx="16" ry="9" fill="#e8f5e9" stroke="#2e7d32"/><text x="334" y="830">입력 (1)</text>
+    <ellipse cx="310" cy="852" rx="16" ry="9" fill="#e3f2fd" stroke="#1565c0"/><text x="334" y="857">생성 — 규칙엔진+RAG (1)</text>
+    <ellipse cx="310" cy="879" rx="16" ry="9" fill="#f3e5f5" stroke="#6a1b9a"/><text x="334" y="884">열람 (4)</text>
+    <ellipse cx="310" cy="906" rx="16" ry="9" fill="#f5f5f5" stroke="#616161"/><text x="334" y="911">공통 «include» (1)</text>
+    <ellipse cx="560" cy="825" rx="16" ry="9" fill="#ffebee" stroke="#c62828"/><text x="584" y="830">평시 관리 (2)</text>
+    <line x1="545" y1="852" x2="578" y2="852" stroke="#555" stroke-width="1.4"/><text x="584" y="857">Association</text>
+    <line x1="545" y1="879" x2="578" y2="879" stroke="#555" stroke-width="1.4" stroke-dasharray="6 4" marker-end="url(#arr)"/><text x="584" y="884">«include» / «extend»</text>
+  </g>
+
+  <!-- ══ 전체 요약 ══ -->
+  <rect x="920" y="800" width="440" height="122" rx="8" fill="#fff" stroke="#ccc"/>
+  <text x="940" y="828" font-size="15" font-weight="bold">전체 요약</text>
+  <text x="940" y="852" font-size="13">UC 9개 (재난 시 7 · 평시 2)  |  액터: 인간 2 (통합지휘권자 · 관리자) + 외부 시스템 2</text>
+  <text x="940" y="872" font-size="13">Include 4건  |  Extend 1건  |  FR 19건(C1~C5 + S/E 14)은 UC-02 내부 규칙</text>
+  <text x="940" y="892" font-size="12" fill="#777">발화점·폴리곤 등록 = 산림청(확산예측 모듈) 소관 — 본 시스템 범위 밖 (p.28·32~33)</text>
+  <text x="940" y="910" font-size="12" fill="#777">근거: 산림보호법 §37 · 표준매뉴얼(2026.6) p.72·84 · 교수님 4주차 요구사항분석 틀</text>
+</svg>
