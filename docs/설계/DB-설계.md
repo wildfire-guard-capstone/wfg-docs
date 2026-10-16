@@ -58,7 +58,7 @@
 | 시각 | `_at` (timestamptz) | `created_at`, `observed_at` |
 | 날짜 | `_on` (date) | `issued_on` |
 | 사람 | `_by` (users.id 외래키) | `created_by`, `ended_by` |
-| 참/거짓 | `is_` / `has_` | `is_locked` |
+| 참/거짓 | `is_` / `has_` | `is_confirmed` |
 | 단위 있는 수치 | 단위를 접미어로 | `area_ha`, `wind_speed_ms`, `wind_dir_deg` |
 | 상태·구분 값 | 영어 대문자 코드로 저장, 한글 라벨은 화면에서 | `RECEIVED` → 「접수」 |
 | 설명 | 모든 테이블·컬럼에 한글 `COMMENT` | |
@@ -351,7 +351,7 @@
 
 | 테이블 | 이름 | 담는 것 | 성격 | 구분 | 근거 기능 |
 |---|---|---|---|---|---|
-| `users` | 계정 | 사용자 한 명의 계정·권한·관할·잠금 상태. 토큰 무효화 기준값도 여기에 둔다(D-16) | 기준 | 핵심 | F-01, 모든 행위자 기록 |
+| `users` | 계정 | 사용자 한 명의 계정·권한·관할·잠금(실패 횟수)·회수 여부 | 기준 | 핵심 | F-01, 모든 행위자 기록 |
 | `event_logs` | 이벤트 로그 | 화면에서 읽는 사용자 행위·시스템 이벤트 1건 = 1행 | 감사 로그 | 핵심 | F-32, ORP-001 |
 
 #### B. 지역·정적 레이어
@@ -595,7 +595,6 @@ erDiagram
 ```mermaid
 erDiagram
     admin_areas ||--o{ users : "관할 지역"
-    users |o--o{ users : "발급·수정한 관리자"
     users |o--o{ event_logs : "행위자"
     incidents |o--o{ event_logs : "관련 산불"
 
@@ -607,17 +606,10 @@ erDiagram
         varchar(100) organization "소속"
         text role "COMMANDER·VIEWER·REPORTER·ADMIN"
         bigint admin_area_id FK "관할 지역(ADMIN은 NULL=전체)"
-        text status "ACTIVE·REVOKED·DELETED"
-        boolean is_locked "로그인 잠금"
-        smallint failed_login_count "연속 실패 횟수"
-        timestamptz locked_at "잠긴 시각"
-        integer token_version "토큰 무효화 기준값"
-        timestamptz last_login_at "마지막 로그인"
+        smallint failed_login_count "연속 실패 횟수(5 이상 = 잠김)"
         timestamptz created_at "발급 시각"
-        bigint created_by FK "발급한 관리자"
         timestamptz updated_at "마지막 변경 시각"
-        bigint updated_by FK "마지막 변경한 관리자"
-        timestamptz revoked_at "회수 시각"
+        timestamptz deleted_at "회수·삭제 시각(NULL = 사용 중)"
     }
 
     event_logs {
@@ -655,22 +647,26 @@ erDiagram
 | `organization` | varchar(100) | N | | | 소속 기관 | 프로토 39쪽 |
 | `role` | text | N | | CHECK `IN ('COMMANDER','VIEWER','REPORTER','ADMIN')` | 권한: 조작·열람·보고·관리 | SER-001 |
 | `admin_area_id` | bigint | Y | | FK → `admin_areas.id`<br>CHECK `role = 'ADMIN' OR admin_area_id IS NOT NULL` | 관할 지역(시군구). 전산 관리자만 NULL 허용(= 전체) | 0.13, D-04 |
-| `status` | text | N | `'ACTIVE'` | CHECK `IN ('ACTIVE','REVOKED','DELETED')` | 계정 상태: 발급·회수·삭제 [D-20] | F-01, 프로토 39쪽 |
-| `is_locked` | boolean | N | `false` | | 5회 연속 실패로 잠김 | SER-001-7 |
-| `failed_login_count` | smallint | N | `0` | CHECK `>= 0` | 연속 로그인 실패 횟수. 성공하면 0 | SER-001-7 |
-| `locked_at` | timestamptz | Y | | CHECK `is_locked = (locked_at IS NOT NULL)` | 잠긴 시각 | 프로토 39쪽 |
-| `token_version` | integer | N | `0` | | 회수·권한 변경·재발급 때 1 올림. JWT의 값과 다르면 거부 | D-16 |
-| `last_login_at` | timestamptz | Y | | | 마지막 로그인 성공 시각 | 프로토 39쪽 |
-| `created_at` | timestamptz | N | `now()` | | 발급 시각 | 0.11 |
-| `created_by` | bigint | Y | | FK → `users.id` | 발급한 전산 관리자. 최초 관리자 계정은 NULL | 0.11 |
+| `failed_login_count` | smallint | N | `0` | CHECK `>= 0` | 연속 로그인 실패 횟수. **5 이상이면 잠김**, 로그인 성공·관리자 잠금 해제 시 0 | SER-001-7 |
+| `created_at` | timestamptz | N | `now()` | | 발급 시각 | F-01 |
 | `updated_at` | timestamptz | N | `now()` | | 마지막 변경 시각 | 0.6 |
-| `updated_by` | bigint | Y | | FK → `users.id` | 마지막으로 변경한 사람 | 0.11 |
-| `revoked_at` | timestamptz | Y | | CHECK `status <> 'REVOKED' OR revoked_at IS NOT NULL` | 회수 시각 | F-01 |
+| `deleted_at` | timestamptz | Y | | | 회수·삭제 시각. **NULL이면 사용 중**, 값이 있으면 로그인 불가·목록에서 숨김 [D-20] | F-01, 프로토 39쪽 |
 
 인덱스
 
-- `UNIQUE (lower(login_id))` — 대소문자만 다른 아이디 금지 [D-21]
-- `(admin_area_id, role)` — 관할별 계정 목록, 마지막 통합지휘권자 검사
+- `UNIQUE (lower(login_id))` — 대소문자만 다른 아이디 금지 [D-21]. 회수된 계정의 아이디도 재사용하지 않음(이력 혼동 방지)
+- `(admin_area_id, role) WHERE deleted_at IS NULL` — 관할별 사용 중 계정 목록, 마지막 통합지휘권자 검사
+
+MVP에서 뺀 컬럼과 대신하는 방법
+
+| 뺀 컬럼 | 대신하는 방법 |
+|---|---|
+| `status` | `deleted_at`이 NULL인지로 사용 중·회수 판단. 화면의 「회수」와 「삭제」를 하나로 합침 |
+| `is_locked`, `locked_at` | `failed_login_count >= 5`이면 잠김 |
+| `token_version` | API 요청마다 `users` 행을 읽어 `deleted_at`·`role`을 확인하므로 회수·권한 변경이 바로 적용됨 |
+| `last_login_at` | 필요하면 `event_logs`의 `LOGIN_SUCCESS`로 조회 |
+| `created_by`, `updated_by` | 누가 발급·변경했는지는 `event_logs`(`ADMIN` 구분, `target_table = 'users'`)에 남음 |
+| `revoked_at` | `deleted_at`으로 통합 |
 
 #### `event_logs` — 이벤트 로그
 
@@ -706,7 +702,7 @@ erDiagram
 | `NO_EVIDENCE` | `ITEM_NO_EVIDENCE`, `ANSWER_NO_EVIDENCE` |
 | `CORRECTION` | `CORRECTION_CONFIRMED`, `CORRECTION_CANCELLED`, `CORRECTION_REJECTED` |
 | `CLOSE` | `INCIDENT_CLOSED` |
-| `ADMIN` | `ACCOUNT_ISSUED`, `ACCOUNT_REVOKED`, `ACCOUNT_REISSUED`, `ACCOUNT_DELETED`, `ROLE_CHANGED`, `ACCOUNT_UNLOCKED`, `RESOURCE_CREATED`, `RESOURCE_UPDATED`, `RESOURCE_DELETED` |
+| `ADMIN` | `ACCOUNT_ISSUED`, `ACCOUNT_REVOKED`, `ACCOUNT_REISSUED`, `ROLE_CHANGED`, `ACCOUNT_UNLOCKED`, `RESOURCE_CREATED`, `RESOURCE_UPDATED`, `RESOURCE_DELETED` |
 | `SYSTEM` | `WEATHER_FETCH_FAILED`, `EXTERNAL_FAILED` |
 
 > `action`은 코드가 계속 늘어날 수 있어 CHECK를 걸지 않고 애플리케이션 상수로 관리한다. 화면 필터는 `category`로 한다.
@@ -715,14 +711,13 @@ erDiagram
 
 | # | 규칙 | 구현 위치 |
 |---|---|---|
-| A-1 | `status`가 `ACTIVE`가 아니거나 `is_locked = true`이면 로그인 거부 | API |
-| A-2 | 로그인 실패 시 `failed_login_count + 1`, 5가 되면 `is_locked = true`, `locked_at = now()`. 성공하면 0으로 | API (한 트랜잭션) |
-| A-3 | 잠금 해제는 전산 관리자만. `is_locked = false`, `failed_login_count = 0`, `locked_at = NULL` | API |
-| A-4 | 회수·권한 변경·재발급·삭제 때 `token_version + 1` → 이전 토큰 즉시 무효 | API |
-| A-5 | API 요청마다 JWT의 `user_id`·`token_version`을 `users`와 비교하고, 상태·권한도 이 행 기준으로 판단 | API (인증 미들웨어) |
-| A-6 | 관할 지역의 마지막 `ACTIVE` 통합지휘권자는 회수·삭제·권한 변경 불가 | API (+ 필요 시 트리거) |
+| A-1 | `deleted_at IS NOT NULL`이거나 `failed_login_count >= 5`이면 로그인 거부 | API |
+| A-2 | 로그인 실패 시 `failed_login_count + 1`(5가 되면 `ACCOUNT_LOCKED` 로그), 성공하면 0 | API (한 트랜잭션) |
+| A-3 | 잠금 해제는 전산 관리자만: `failed_login_count = 0` | API |
+| A-4 | 회수·삭제는 `deleted_at = now()`. 행은 지우지 않는다 | API (D-20) |
+| A-5 | API 요청마다 JWT의 `user_id`로 `users` 행을 읽어 `deleted_at`·`failed_login_count`·`role`을 확인. 회수·권한 변경이 다음 요청부터 바로 적용됨 | API (인증 미들웨어, D-16) |
+| A-6 | 관할 지역의 마지막 사용 중 통합지휘권자는 회수·권한 변경 불가 | API |
 | A-7 | `event_logs`는 애플리케이션 DB 계정에서 UPDATE·DELETE 권한 회수 | DB 권한 (0.12) |
-| A-8 | 계정 행은 삭제(DELETE)하지 않는다. 화면의 「삭제」는 `status = 'DELETED'` | API (D-20) |
 
 #### 분석서 모델과 비교
 
@@ -730,8 +725,9 @@ erDiagram
 |---|---|---|---|
 | 관할 | `sigungu_code` 문자열 | `admin_area_id` 외래키, 관리자는 NULL 허용 | 0.13 지역 독립, 행정구역 테이블과 연결 |
 | 소속 | `name`에 「열람자 1(유관기관)」처럼 섞음 | `organization` 분리 | 프로토 39쪽 발급 화면이 이름·소속을 따로 받음 |
-| 계정 상태 | 발급·회수 | 발급·회수·삭제 | 프로토 39쪽에 「삭제」가 있음 |
-| 잠긴 시각, 토큰 버전, 마지막 로그인, 회수 시각, 발급·변경자 | 없음 | 추가 | 프로토 39쪽 계정 현황, D-16, 0.11 |
+| 계정 상태 | `status`(발급·회수) | `deleted_at` 하나로 회수·삭제 표현 | MVP 단순화. 회수와 삭제를 구분할 기능이 없음 |
+| 잠금 | `locked` 컬럼 + `failed_count` | `failed_login_count`만 (5 이상 = 잠김) | 같은 정보를 두 컬럼에 두지 않음 |
+| 발급일 | `issued_at`(date) | `created_at`(timestamptz) | 0.2·0.4 시간 규칙 |
 | 이벤트 구분 | 8종 | 9종 (로그인 `AUTH` 추가) + 세부 `action` | F-32가 로그인·로그아웃을 기록 대상으로 명시 |
 | 대상 행·부가 정보 | 없음 | `target_table`·`target_id`·`details` | 로그에서 해당 제안서·화선으로 바로 이동, 변경 전후 값 확인 |
 
@@ -780,11 +776,11 @@ erDiagram
 | D-13 (Q-07) | 기상 저장 범위 | 프로토 28쪽 항목 전부 + 발표·수신 시각 | 그대로 채택 |
 | D-14 (Q-08) | 종료 산불 위험도 | ① 숨김(프로토) ② 「종료」 표시(수정 분석서) | 팀 결정 — 저장 구조는 같음 |
 | D-15 (Q-09) | 이벤트 로그와 AI 처리 기록 | ① 한 테이블 ② 분리 | ② — 화면용 로그를 짧고 읽기 쉽게 유지 |
-| D-16 (Q-10) | 세션 저장 | ① JWT만(짧은 만료) ② 세션·토큰 무효화 기록을 DB에 | **확정: ①** (2026-10-16 팀장 결정) — 세션 테이블 없이 JWT로 관리. 회수·권한 변경의 즉시 적용은 요청마다 `users`의 상태·권한을 확인하거나, `users`에 토큰 무효화 기준값(토큰 버전 등)을 두어 처리(3단계에서 컬럼 확정) |
+| D-16 (Q-10) | 세션 저장 | ① JWT만(짧은 만료) ② 세션·토큰 무효화 기록을 DB에 | **확정: ①** (2026-10-16 팀장 결정) — 세션 테이블 없이 JWT로 관리. 회수·권한 변경의 즉시 적용은 요청마다 `users` 행을 읽어 확인(규칙 A-5) |
 | D-17 (Q-11) | E5 진화차량 진입로 | ① 도로 레이어 속성(진입로 표시) ② 별도 정적 자료 ③ 이번 범위에서 제외 | 팀 확인 필요 — 자료 출처부터 |
 | D-18 (Q-12) | 변경 태그 | ① 생성 시 저장 ② 조회 시 계산 | ① — UC-PRED-01이 「생성 시 변경 태그를 붙인다」고 정의 |
 | D-19 (Q-13) | 여러 시·군에 걸친 산불의 관할 | ① 사건은 발화 지점 시군 하나에 속하고, 확산 범위가 걸친 시군은 따로 기록 ② 사건이 여러 시군에 속할 수 있음 | ① — 관할 기준이 단순하고, 걸친 시군 목록은 열람 권한·유관기관 판정에 씀. 법령상 지휘권 인계(S6)와 함께 팀 확인 |
-| D-20 | 계정 「삭제」 처리 | ① 상태만 `DELETED`로(행 유지) ② 실제 행 삭제 | ① — 이벤트 로그·산불·화선이 계정을 참조하므로 행을 지우면 이력이 끊김. 삭제된 계정은 목록에서 숨김 |
+| D-20 | 계정 「회수·삭제」 처리 | ① 행 유지 + `deleted_at` ② 실제 행 삭제 | **확정: ①** (2026-10-16 팀장 결정) — 회수와 삭제를 `deleted_at` 하나로 합침. 이벤트 로그·산불·화선이 계정을 참조하므로 행은 남김 |
 | D-21 | 로그인 아이디 대소문자 | ① 구분 안 함 ② 구분 | ① — `CMD01`과 `cmd01`이 다른 계정이 되는 혼란 방지 |
 | D-22 | 재발급 후 비밀번호 변경 강제 | ① 강제(`must_change_password` 추가) ② 강제 안 함 | ② — 요구사항에 없음. 필요하면 컬럼 하나로 추가 가능 |
 | D-23 | 이벤트 로그에 접속 IP 기록 | ① 기록 ② 기록 안 함 | ② — 요구사항(SER-003-4)은 사용자·시각만 요구. 필요하면 `details`에 추가 |
