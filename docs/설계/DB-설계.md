@@ -76,6 +76,7 @@
   - **업무 시각** — 현실에서 일이 일어난 때: 발생 일시, 신고 접수 일시, 화선 관측 시각, 예보 기준 시각
   - **기록 시각** — 시스템에 저장된 때: `created_at`
 - 업무 시각을 모르면 NULL을 허용한다(예: 발생 일시는 선택 입력).
+- 시스템 안에서 일어나 바로 저장되는 일(로그인, 이벤트 로그 등)은 업무 시각과 기록 시각이 같으므로 `created_at` 하나만 둔다.
 
 ### 0.5 공간 규칙
 
@@ -618,15 +619,11 @@ erDiagram
 
     event_logs {
         bigint id PK
-        timestamptz occurred_at "발생 시각"
-        text category "화면 구분"
-        varchar(50) action "🟡 보류 - 세부 동작 코드"
-        text message "화면 표시 내용"
-        bigint user_id FK "행위자(시스템은 NULL)"
-        bigint incident_id FK "관련 산불(없으면 NULL)"
-        varchar(50) target_table "🟡 보류 - 대상 테이블"
-        bigint target_id "🟡 보류 - 대상 행 id"
-        jsonb details "부가 정보"
+        timestamptz created_at "언제"
+        bigint user_id FK "누가(시스템은 NULL)"
+        bigint incident_id FK "어느 산불(없으면 NULL)"
+        varchar(50) action "무엇을(동작 코드)"
+        jsonb details "세부 사실(대상 id, 버전, 전후 값)"
     }
 
     admin_areas {
@@ -677,61 +674,57 @@ MVP에서 뺀 컬럼과 대신하는 방법
 | `is_locked`, `locked_at` | `failed_login_count >= 5`이면 잠김 |
 | `token_version` | API 요청마다 `users` 행을 읽어 `deleted_at`·`role`을 확인하므로 회수·권한 변경이 바로 적용됨 |
 | `last_login_at` | 필요하면 `event_logs`의 `LOGIN_SUCCESS`로 조회 |
-| `created_by`, `updated_by` | 누가 발급·변경했는지는 `event_logs`(`ADMIN` 구분)에 남음. 대상 계정은 `target_id` 또는 `details`로 찾음 (D-26) |
+| `created_by`, `updated_by` | 누가 발급·변경했는지는 `event_logs`에 남음(`action` = `ACCOUNT_ISSUED`·`ROLE_CHANGED` 등, 대상 계정은 `details`) |
 | `revoked_at` | `deleted_at`으로 통합 |
 
 #### `event_logs` — 이벤트 로그
 
-화면 「이벤트 로그」에 한 줄로 보이는 이벤트 1건 = 1행. **추가만** 한다(0.6).
+**목적: 「누가, 언제, 어느 산불에서, 무엇을 했는지」라는 사실을 기록한다.** 이벤트 1건 = 1행이고 **추가만** 한다(0.6). 화면의 「이벤트 로그」 창(프로토 36쪽)에 보이는 구분·내용 문장은 저장하지 않고, 조회할 때 `action`과 `details`로 만든다.
 
 | 컬럼 | 타입 | NULL | 기본값 | 제약 | 설명 | 근거 |
 |---|---|---|---|---|---|---|
 | `id` | bigint | N | identity | PK | 로그 ID | 0.3 |
-| `occurred_at` | timestamptz | N | `now()` | | 발생 시각 | F-32, ORP-001-2 |
-| `category` | text | N | | CHECK `IN ('AUTH','INPUT','PREDICTION','PROPOSAL','NO_EVIDENCE','CORRECTION','CLOSE','ADMIN','SYSTEM')` | 화면의 「구분」: 로그인·입력·예측·제안·근거 부족·정정·종료·관리·시스템 | F-32, 프로토 36쪽 |
-| 🟡 `action` | varchar(50) | N | | | **보류.** 세부 동작 코드. 예: `LOGIN_SUCCESS`, `LOGIN_FAILED`, `ACCOUNT_LOCKED`, `PERIMETER_REPORTED`, `PROPOSAL_CREATED`. 목록은 아래 | ORP-001-1, D-25 |
-| `message` | text | N | | | 화면에 그대로 보이는 한 줄. 예: 「대응 제안 v1.2 생성(상황 정정) · 변경 2건」 | F-32 |
-| `user_id` | bigint | Y | | FK → `users.id` | 행위자. 시스템 이벤트·없는 아이디로 로그인 실패는 NULL | ORP-001-2 |
-| `incident_id` | bigint | Y | | FK → `incidents.id` | 관련 산불. 로그인·계정 관리 이벤트는 NULL | F-32 |
-| 🟡 `target_table` | varchar(50) | Y | | CHECK `(target_table IS NULL) = (target_id IS NULL)` | **보류.** 이벤트가 만든·바꾼 행의 테이블. 예: `proposals` | 0.11, D-26 |
-| 🟡 `target_id` | bigint | Y | | | **보류.** 그 행의 id | 0.11, D-26 |
-| `details` | jsonb | Y | | | 부가 정보. 예: 로그인 실패 시 시도한 아이디, 변경 전후 권한. **개인정보(신고자 성명·연락처)는 넣지 않음** | 0.9, 0.12 |
+| `created_at` | timestamptz | N | `now()` | | **언제.** 이벤트가 일어나 기록된 시각(둘이 같으므로 하나만, 0.4) | F-32, ORP-001-2 |
+| `user_id` | bigint | Y | | FK → `users.id` | **누가.** 시스템 이벤트·없는 아이디로 로그인 실패는 NULL | ORP-001-2 |
+| `incident_id` | bigint | Y | | FK → `incidents.id` | **어느 산불.** 로그인·계정 관리 이벤트는 NULL | F-32 |
+| `action` | varchar(50) | N | | (D-02에 따라 ENUM 가능) | **무엇을.** 동작 코드. 목록은 아래 | F-32, ORP-001-1 |
+| `details` | jsonb | Y | | | **세부 사실.** 대상 id, 버전, 변경 전후 값 등. 예: `{"proposal_id": 12, "version": "v1.2", "reason": "CORRECTION", "changed": 2}`. **개인정보(신고자 성명·연락처)는 넣지 않음** | 0.9, 0.12 |
 
 인덱스
 
-- `(incident_id, occurred_at DESC)` — 산불별 이벤트 로그 화면
-- `(occurred_at DESC)` — 전체 최근 이벤트
-- `(user_id, occurred_at DESC)` — 사용자별 행위 추적
+- `(incident_id, created_at DESC)` — 산불별 이벤트 로그 화면
+- `(created_at DESC)` — 전체 최근 이벤트
+- `(user_id, created_at DESC)` — 사용자별 행위 추적
 
-`action` 코드 초안 (category별)
+`action` 코드 초안 — 왼쪽 「화면 구분」은 저장하지 않고 애플리케이션의 대응표로 계산한다
 
-| category | action |
+| 화면 구분 | action |
 |---|---|
-| `AUTH` | `LOGIN_SUCCESS`, `LOGIN_FAILED`, `ACCOUNT_LOCKED`, `LOGOUT` |
-| `INPUT` | `INCIDENT_REPORTED`, `PERIMETER_REPORTED`, `PERIMETER_CORRECTED` |
-| `PREDICTION` | `PREDICTION_STARTED`, `PREDICTION_CONFIRMED`, `PREDICTION_FAILED`, `RISK_COMPUTED` |
-| `PROPOSAL` | `PROPOSAL_CREATED`, `PROPOSAL_FAILED` |
-| `NO_EVIDENCE` | `ITEM_NO_EVIDENCE`, `ANSWER_NO_EVIDENCE` |
-| `CORRECTION` | `CORRECTION_CONFIRMED`, `CORRECTION_CANCELLED`, `CORRECTION_REJECTED` |
-| `CLOSE` | `INCIDENT_CLOSED` |
-| `ADMIN` | `ACCOUNT_ISSUED`, `ACCOUNT_REVOKED`, `ACCOUNT_REISSUED`, `ROLE_CHANGED`, `ACCOUNT_UNLOCKED`, `RESOURCE_CREATED`, `RESOURCE_UPDATED`, `RESOURCE_DELETED` |
-| `SYSTEM` | `WEATHER_FETCH_FAILED`, `EXTERNAL_FAILED` |
+| 로그인 | `LOGIN_SUCCESS`, `LOGIN_FAILED`, `ACCOUNT_LOCKED`, `LOGOUT` |
+| 입력 | `INCIDENT_REPORTED`, `PERIMETER_REPORTED`, `PERIMETER_CORRECTED` |
+| 예측 | `PREDICTION_STARTED`, `PREDICTION_CONFIRMED`, `PREDICTION_FAILED`, `RISK_COMPUTED` |
+| 제안 | `PROPOSAL_CREATED`, `PROPOSAL_FAILED` |
+| 근거 부족 | `ITEM_NO_EVIDENCE`, `ANSWER_NO_EVIDENCE` |
+| 정정 | `CORRECTION_CONFIRMED`, `CORRECTION_CANCELLED`, `CORRECTION_REJECTED` |
+| 종료 | `INCIDENT_CLOSED` |
+| 관리 | `ACCOUNT_ISSUED`, `ACCOUNT_REVOKED`, `ACCOUNT_REISSUED`, `ROLE_CHANGED`, `ACCOUNT_UNLOCKED`, `RESOURCE_CREATED`, `RESOURCE_UPDATED`, `RESOURCE_DELETED` |
+| 시스템 | `WEATHER_FETCH_FAILED`, `EXTERNAL_FAILED` |
 
-> `action`은 코드가 계속 늘어날 수 있어 CHECK를 걸지 않고 애플리케이션 상수로 관리한다. 화면 필터는 `category`로 한다.
+화면 문장 예 (저장하지 않음)
 
-> [!WARNING]
-> **🟡 보류 컬럼 — `action` (세부 동작 코드)** [D-25]
->
-> - **왜 넣었나**: `category`는 화면용 9종이라 「로그인 성공·실패·잠김」이 모두 `AUTH`로 묶인다. 로그인 실패만 세거나 특정 동작을 골라 보려면 세부 코드가 있어야 한다(ORP-001-1의 이벤트 종류 구분).
-> - **왜 빼려 하나**: 화면(프로토 36쪽)은 구분·내용·사용자·시각만 보여 주고 세부 코드를 쓰지 않는다. 같은 정보가 `message` 문장에도 들어 있다. 코드 목록을 계속 관리해야 하는 부담이 있다.
-> - **무엇을 보고 정하나**: 이벤트 로그를 코드에서 조건으로 검색할 일이 있는지(예: 로그인 실패 통계, 테스트에서 특정 이벤트 기록 여부 검사 — TER-001). 있으면 남긴다.
+| action + details | 화면 |
+|---|---|
+| `PROPOSAL_CREATED` `{"version": "v1.2", "reason": "CORRECTION", "changed": 2}` | 「제안」 대응 제안 v1.2 생성(상황 정정) · 변경 2건 |
+| `ROLE_CHANGED` `{"target_user_id": 7, "before": "VIEWER", "after": "REPORTER"}` | 「관리」 view02 권한 변경: 열람 → 보고 |
 
-> [!WARNING]
-> **🟡 보류 컬럼 — `target_table`, `target_id` (대상 행)** [D-26]
->
-> - **왜 넣었나**: 이벤트가 만들거나 바꾼 행을 정확히 가리키려고. 예: 「대응 제안 v1.2 생성」 로그에서 그 제안서로 바로 이동, 「권한 변경」 로그에서 어느 계정인지 확인. `users`의 `created_by`·`updated_by`를 뺀 대신 「누가 이 계정을 바꿨나」도 이 컬럼으로 찾는다.
-> - **왜 빼려 하나**: 화면에 「로그 → 해당 화면으로 이동」 기능이 없다(프로토 36쪽). 한 컬럼이 여러 테이블을 가리켜 외래키를 걸 수 없다. 대상은 `message`나 `details`에도 적을 수 있다.
-> - **무엇을 보고 정하나**: 「이 계정·제안서에 무슨 일이 있었나」를 거꾸로 찾는 조회가 필요한지. 필요 없으면 빼고 `details`에 대상 id를 넣는다.
+MVP에서 뺀 컬럼
+
+| 뺀 컬럼 | 이유 |
+|---|---|
+| `category` (화면 구분) | `action`에서 계산된다 |
+| `message` (화면 문장) | 사실이 아니라 표현이다. 다른 테이블과 중복되고, 문구를 바꾸면 과거 로그와 어긋난다 |
+| `target_table`, `target_id` | 화면에 로그 → 대상 이동 기능이 없다. 대상 id는 `details`에 넣는다 |
+| `occurred_at` | `created_at`과 같은 시각이다 |
 
 #### 규칙
 
@@ -754,8 +747,8 @@ MVP에서 뺀 컬럼과 대신하는 방법
 | 계정 상태 | `status`(발급·회수) | `deleted_at` 하나로 회수·삭제 표현 | MVP 단순화. 회수와 삭제를 구분할 기능이 없음 |
 | 잠금 | `locked` 컬럼 + `failed_count` | `failed_login_count`만 (5 이상 = 잠김) | 같은 정보를 두 컬럼에 두지 않음 |
 | 발급일 | `issued_at`(date) | `created_at`(timestamptz) | 0.2·0.4 시간 규칙 |
-| 이벤트 구분 | 8종 | 9종 (로그인 `AUTH` 추가) + 세부 `action` | F-32가 로그인·로그아웃을 기록 대상으로 명시 |
-| 대상 행·부가 정보 | 없음 | `target_table`·`target_id`·`details` | 로그에서 해당 제안서·화선으로 바로 이동, 변경 전후 값 확인 |
+| 이벤트 기록 방식 | `category`(8종) + `content`(화면 문장) | `action`(동작 코드) + `details`(사실). 구분·문장은 조회 때 계산 | 사실과 표현을 분리. 로그인·로그아웃도 기록(F-32) |
+| 발생 시각 | `created_at` | `created_at` | 같음 |
 
 ### 3.2 B. 지역·정적 레이어
 
@@ -811,5 +804,5 @@ MVP에서 뺀 컬럼과 대신하는 방법
 | D-22 | 재발급 후 비밀번호 변경 강제 | ① 강제(`must_change_password` 추가) ② 강제 안 함 | ② — 요구사항에 없음. 필요하면 컬럼 하나로 추가 가능 |
 | D-23 | 이벤트 로그에 접속 IP 기록 | ① 기록 ② 기록 안 함 | ② — 요구사항(SER-003-4)은 사용자·시각만 요구. 필요하면 `details`에 추가 |
 | 🟡 D-24 | `users.admin_area_id`(관할 지역) | ① 유지 ② MVP에서 빼고 나중에 지역별 권한을 따로 설계 | ② 추천 — 3.1 보류 상자 참고 |
-| 🟡 D-25 | `event_logs.action`(세부 코드) | ① 유지 ② 빼고 `category`·`message`만 | 팀 판단 — 코드로 로그를 검색할 일이 있는지 |
-| 🟡 D-26 | `event_logs.target_table`·`target_id` | ① 유지 ② 빼고 `details`에 대상 id | ② 추천 — 화면에 로그→대상 이동 기능 없음 |
+| D-25 | `event_logs.action`(세부 코드) | ① 유지 ② 빼고 `category`·`message`만 | **확정: ①** (2026-10-16 팀장 결정) — `message`·`category`를 빼고 `action` + `details`로 사실만 기록 |
+| D-26 | `event_logs.target_table`·`target_id` | ① 유지 ② 빼고 `details`에 대상 id | **확정: ②** (2026-10-16 팀장 결정) |
