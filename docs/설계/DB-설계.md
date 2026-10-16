@@ -19,7 +19,7 @@
 | 0 | 설계 원칙 — 저장 범위, 이름·키·시간·좌표 규칙, 삭제·버전 정책 | **초안** |
 | 1 | 저장해야 할 데이터 — 기능·화면에서 "저장할 값" 추출 | **초안** |
 | 2 | 개념 ERD — 2-1 테이블 목록·관계, 2-2 기능 × 테이블 CRUD 표로 검사 | **2-1 초안** |
-| 3 | 논리 설계 — 묶음별 컬럼·타입·키·제약 | **A 완료**(🟡 D-24 제외) |
+| 3 | 논리 설계 — 묶음별 컬럼·타입·키·제약 | **A 완료** |
 | 4 | 물리 설계 — PostGIS 타입, 인덱스, DDL, 마이그레이션 | 대기 |
 | 5 | 검증 — 의성 시나리오 데이터 적재, 유스케이스별 조회 SQL 실행 | 대기 |
 
@@ -610,7 +610,7 @@ erDiagram
         varchar(50) name "이름"
         varchar(100) organization "소속"
         user_role role "ENUM: COMMANDER·VIEWER·REPORTER·ADMIN"
-        bigint admin_area_id FK "🟡 보류 - 관할 지역"
+        bigint admin_area_id FK "관할 지역(ADMIN은 NULL=전체)"
         smallint failed_login_count "연속 실패 횟수(5 이상 = 잠김)"
         timestamptz created_at "발급 시각"
         timestamptz updated_at "마지막 변경 시각"
@@ -647,7 +647,7 @@ erDiagram
 | `name` | varchar(50) | N | | | 이름 | F-01, 프로토 39쪽 |
 | `organization` | varchar(100) | N | | | 소속 기관 | 프로토 39쪽 |
 | `role` | `user_role` (ENUM) | N | | `CREATE TYPE user_role AS ENUM ('COMMANDER','VIEWER','REPORTER','ADMIN')` | 권한: 조작(통합지휘권자)·열람(열람자)·보고(상황 보고자)·관리(전산 관리자) | SER-001 |
-| 🟡 `admin_area_id` | bigint | Y | | FK → `admin_areas.id`<br>CHECK `role = 'ADMIN' OR admin_area_id IS NOT NULL` | **보류.** 관할 지역(시군구). 전산 관리자만 NULL 허용(= 전체) | (직접 요구 없음) D-24 |
+| `admin_area_id` | bigint | Y | | FK → `admin_areas.id`<br>CHECK `role = 'ADMIN' OR admin_area_id IS NOT NULL` | 관할 지역(시군구). 전산 관리자만 NULL 허용(= 전체) | 0.13, D-04, D-24 |
 | `failed_login_count` | smallint | N | `0` | CHECK `>= 0` | 연속 로그인 실패 횟수. **5 이상이면 잠김**, 로그인 성공·관리자 잠금 해제 시 0 | SER-001-7 |
 | `created_at` | timestamptz | N | `now()` | | 발급 시각 | F-01 |
 | `updated_at` | timestamptz | N | `now()` | | 마지막 변경 시각 | 0.6 |
@@ -656,15 +656,13 @@ erDiagram
 인덱스
 
 - `UNIQUE (lower(login_id))` — 대소문자만 다른 아이디 금지 [D-21]. 회수된 계정의 아이디도 재사용하지 않음(이력 혼동 방지)
-- 🟡 `(admin_area_id, role) WHERE deleted_at IS NULL` — 관할별 사용 중 계정 목록, 마지막 통합지휘권자 검사 (`admin_area_id`를 빼면 `(role) WHERE deleted_at IS NULL`)
+- `(admin_area_id, role) WHERE deleted_at IS NULL` — 관할별 사용 중 계정 목록, 마지막 통합지휘권자 검사
 
-> [!WARNING]
-> **🟡 보류 컬럼 — `admin_area_id` (관할 지역)** [D-24]
+> [!NOTE]
+> **`admin_area_id`를 남긴 이유** [D-24 확정]
 >
-> - **왜 넣었나**: ① D-04에서 여러 지역을 지원하기로 했으니 사용자도 담당 지역이 있어야 한다고 봤다. ② 통합지휘권자는 해당 시·군·구의 시장·군수·구청장이라, 법적으로 자기 관할 산불만 지휘한다. ③ 「마지막 통합지휘권자 보호」(A-6)를 지역마다 적용하려면 관할이 필요하다. ④ 분석서 모델에도 `sigungu_code`가 있었다.
-> - **왜 빼려 하나**: ① 이 컬럼을 직접 요구하는 기능 요구사항이 없다. F-01·SER-001은 권한(조작·열람·보고·관리) 구분만 요구한다. ② MVP 시연은 한 지역이라 모든 사용자가 모든 산불을 봐도 문제가 없다. ③ 제대로 하려면 컬럼 하나로 부족하다. 도 단위 상급 본부 열람자는 여러 시·군을 보고, 산불이 시·군 경계를 넘으면 관할이 바뀐다(D-19). ④ 나중에 NULL 허용 컬럼으로 추가하기 쉽다.
-> - **빼도 지켜지는 것**: 공용 스키마(0.13)는 산불·마을·시설 같은 **데이터**의 행정구역 코드로 지켜진다. 사용자 관할은 「누가 무엇을 볼 수 있나」라는 **권한** 문제라 별개다.
-> - **무엇을 보고 정하나**: MVP에서 「지역별로 보이는 산불을 나눈다」를 시연할지. 안 한다면 빼고, A-6은 「시스템 전체의 마지막 통합지휘권자」로 바꾼다.
+> - 통합지휘권자는 해당 시·군·구의 시장·군수·구청장이라 법적으로 자기 관할 산불을 지휘한다. 관할별 마지막 통합지휘권자 보호(A-6)에도 쓴다.
+> - 검토했던 반대 의견: 이 컬럼을 직접 요구하는 기능이 없고, 도 단위 열람자처럼 여러 지역을 보는 경우는 컬럼 하나로 표현할 수 없다. 이런 경우는 MVP 이후 지역별 권한을 따로 설계할 때 다룬다.
 
 MVP에서 뺀 컬럼과 대신하는 방법
 
@@ -803,6 +801,6 @@ MVP에서 뺀 컬럼
 | D-21 | 로그인 아이디 대소문자 | ① 구분 안 함 ② 구분 | ① — `CMD01`과 `cmd01`이 다른 계정이 되는 혼란 방지 |
 | D-22 | 재발급 후 비밀번호 변경 강제 | ① 강제(`must_change_password` 추가) ② 강제 안 함 | ② — 요구사항에 없음. 필요하면 컬럼 하나로 추가 가능 |
 | D-23 | 이벤트 로그에 접속 IP 기록 | ① 기록 ② 기록 안 함 | ② — 요구사항(SER-003-4)은 사용자·시각만 요구. 필요하면 `details`에 추가 |
-| 🟡 D-24 | `users.admin_area_id`(관할 지역) | ① 유지 ② MVP에서 빼고 나중에 지역별 권한을 따로 설계 | ② 추천 — 3.1 보류 상자 참고 |
+| D-24 | `users.admin_area_id`(관할 지역) | ① 유지 ② MVP에서 빼고 나중에 지역별 권한을 따로 설계 | **확정: ①** (2026-10-16 팀장 결정) |
 | D-25 | `event_logs.action`(세부 코드) | ① 유지 ② 빼고 `category`·`message`만 | **확정: ①** (2026-10-16 팀장 결정) — `message`·`category`를 빼고 `action` + `details`로 사실만 기록 |
 | D-26 | `event_logs.target_table`·`target_id` | ① 유지 ② 빼고 `details`에 대상 id | **확정: ②** (2026-10-16 팀장 결정) |
