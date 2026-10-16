@@ -6,7 +6,7 @@
 
 | 항목 | 내용 |
 |---|---|
-| 상태 | 0단계(설계 원칙)·1단계(저장해야 할 데이터) 초안 — 팀 검토 대기 |
+| 상태 | 0단계(설계 원칙)·1단계(저장해야 할 데이터)·2-1단계(테이블 목록·관계) 초안 — 팀 검토 대기 |
 | 시작일 | 2026-10-16 |
 | 최종 산출물 | ERD, 테이블 정의서 (ECR-003 산출정보) → 상세설계서에 반영 |
 | 기준 문서 | ① 수정 요구사항 분석서 (`docs/제출물/4-수정요구사항분석서/`, 2026.10.08) — 기능 F-01~F-32, 유스케이스 15개, 비기능 23개, 5장 클래스·6장 관계형 DB<br>② 프로토타입 보고서 (`docs/제출물/5-프로토타입/`, 2026.10.16) — 특히 48쪽 「프로토타입으로 구체화된 요구사항」 |
@@ -18,7 +18,7 @@
 |---|---|---|
 | 0 | 설계 원칙 — 저장 범위, 이름·키·시간·좌표 규칙, 삭제·버전 정책 | **초안** |
 | 1 | 저장해야 할 데이터 — 기능·화면에서 "저장할 값" 추출 | **초안** |
-| 2 | 개념 ERD — 묶음별 엔티티·관계, 기능 × 엔티티 CRUD 표, 엔티티별 근거 기능 | 대기 |
+| 2 | 개념 ERD — 2-1 테이블 목록·관계, 2-2 기능 × 테이블 CRUD 표로 검사 | **2-1 초안** |
 | 3 | 논리 설계 — 묶음별 컬럼·타입·키·제약 | 대기 |
 | 4 | 물리 설계 — PostGIS 타입, 인덱스, DDL, 마이그레이션 | 대기 |
 | 5 | 검증 — 의성 시나리오 데이터 적재, 유스케이스별 조회 SQL 실행 | 대기 |
@@ -324,7 +324,264 @@
 
 ## 2. ERD
 
-(2단계에서 묶음별로 작성)
+2단계는 두 번에 나눠 진행한다.
+
+- **2-1 (이번)**: 필요한 테이블 목록과 테이블 사이 관계만 정한다. 컬럼은 적지 않는다.
+- **2-2 (다음)**: 기능 × 테이블 CRUD 표로 빠진 테이블·기능이 없는지 검사하고 ERD를 확정한다.
+
+### 2.1 이번 단계에서 임시로 적용한 결정
+
+아직 팀이 정하지 않은 항목은 「7. 결정이 필요한 항목」의 추천안으로 그렸다. 팀 결정이 다르면 아래 테이블이 바뀐다.
+
+| 결정 | 임시 적용 | 영향받는 테이블 |
+|---|---|---|
+| D-03 근거 청크 위치 | PostgreSQL | `evidence_documents`, `evidence_chunks` |
+| D-07 현재 상황 값 | 「현재 상황」을 따로 두고, 정정은 이력으로 | `incident_village_statuses`, `resource_deployments`, `incidents` |
+| D-08 자원 투입 표현 | 자원 단위 + 수량 보정 둘 다 | `resource_deployments` |
+| D-09 산불 병합 | 산불이 「병합된 대표 산불」을 가리킴 | `incidents` (자기 참조) |
+| D-10 판정·도달 대상 | 저장 | `spread_reaches`, `proposal_item_targets` |
+| D-15 이벤트 로그와 AI 처리 기록 | 분리 | `event_logs`, `ai_runs` |
+| D-16 세션 | DB에 저장 | `user_sessions` |
+| D-19 여러 시·군에 걸친 산불 | 관할은 발화 지점 시군 하나, 걸친 지역은 따로 | `incidents`, `incident_areas` |
+
+### 2.2 테이블 목록
+
+7개 묶음, 33개 테이블. 「구분」의 **핵심**은 MVP 기능에 꼭 필요한 테이블, **지원**은 재현성·운영·확장을 위한 테이블이다. 「근거 기능」은 1.2에서 이 테이블의 값을 읽거나 쓰는 기능이다.
+
+#### A. 계정·감사
+
+| 테이블 | 이름 | 담는 것 | 성격 | 구분 | 근거 기능 |
+|---|---|---|---|---|---|
+| `users` | 계정 | 사용자 한 명의 계정·권한·관할·잠금 상태 | 기준 | 핵심 | F-01, 모든 행위자 기록 |
+| `user_sessions` | 로그인 세션 | 로그인 한 번 = 1행. 로그아웃·회수·권한 변경 시 무효화 | 사건 기록 | 지원 | F-01 (D-16) |
+| `event_logs` | 이벤트 로그 | 화면에서 읽는 사용자 행위·시스템 이벤트 1건 = 1행 | 감사 로그 | 핵심 | F-32, ORP-001 |
+
+#### B. 지역·정적 레이어
+
+| 테이블 | 이름 | 담는 것 | 성격 | 구분 | 근거 기능 |
+|---|---|---|---|---|---|
+| `admin_areas` | 행정구역 | 시도·시군구·읍면동 경계. 상위 행정구역을 가리키는 계층 구조 | 정적 | 핵심 | F-05, F-27, 관할 (0.13) |
+| `villages` | 마을 | 행정리 단위 마을과 인구·취약계층 수 | 정적 | 핵심 | F-07, F-16, F-22~F-25 |
+| `facilities` | 시설 | 대피소·취약시설·국가유산·담수지·송전시설·소방서·파출소·유관기관 | 정적 | 핵심 | F-07, F-16, F-19, F-20, F-24, F-25, F-28 |
+| `roads` | 도로 | 도로 선형과 종류 | 정적 | 핵심 | F-07, F-21, F-26 |
+| `population_cells` | 인구 집계 단위 | SGIS 연령별 인구(65세 이상·0~14세)를 가진 공간 단위 | 정적 | 핵심 | F-10 (위험도 인프라 요인) |
+| `dataset_loads` | 적재 이력 | 정적 레이어·근거 문서를 언제, 어떤 출처·버전으로 적재했는지 | 기준 | 지원 | ORP-002, LGR-003 (출처 표기) |
+
+#### C. 산불 사건·보고
+
+| 테이블 | 이름 | 담는 것 | 성격 | 구분 | 근거 기능 |
+|---|---|---|---|---|---|
+| `incidents` | 산불 사건 | 산불 하나의 발생·접수·진행상태·공식 단계·위기경보·종료 정보. 병합되면 대표 산불을 가리킴 | 사건 기록 | 핵심 | F-02~F-05, F-09~F-11, F-30 |
+| `incident_reporters` | 신고자 | 신고 기관·성명·연락처. 개인정보라 사건과 분리해 접근을 제한 | 사건 기록 | 핵심 | F-02, F-04 |
+| `intake_records` | 기관별 접수 기록 | 기관 하나가 접수한 기록 1건 = 1행 | 사건 기록 | 핵심 | F-02, F-04 |
+| `incident_areas` | 산불 관련 지역 | 산불이 걸친 행정구역(관할 외 지역 포함) | 사건 기록 | 지원 | F-04, F-20 (D-19) |
+| `fire_perimeters` | 실측 화선 | 화선 보고 1건 = 1버전. 정정되면 이전 버전은 「정정됨」 | 사건 기록 | 핵심 | F-02, F-04, F-05, F-09 |
+| `weather_observations` | 기상 | 산불 위치의 기상 수신 1회 = 1행(예보·관측, 발표·수신 시각) | 사건 기록 | 핵심 | F-04, F-09, F-17, F-18, ORP-001-5 |
+
+#### D. 현재 상황·정정·자원
+
+| 테이블 | 이름 | 담는 것 | 성격 | 구분 | 근거 기능 |
+|---|---|---|---|---|---|
+| `incident_village_statuses` | 마을별 현재 상황 | 산불 × 마을의 현재 상황(대피명령·대피 완료·부상/고립 등) | 사건 기록 (현재 값) | 핵심 | F-23, F-24, F-27, F-28, F-30 |
+| `situation_corrections` | 상황 정정 요청 | 정정 문장 1건과 확인·취소 결과 | 사건 기록 | 핵심 | F-30 |
+| `correction_changes` | 정정 변화 | 정정 1건에서 해석한 변화 하나(대상·항목·이전→변경) = 1행 | 사건 기록 | 핵심 | F-30, F-14 |
+| `resources` | 진화자원 | 헬기·차량·인력 하나(또는 한 조)의 소속·수량·위치·상태 | 기준 | 핵심 | F-08, F-17, F-21, F-31 |
+| `resource_deployments` | 자원 투입 | 어떤 산불에 자원을 투입·철수한 기록. 정정의 「헬기 2대 추가」 같은 수량 보정도 여기에 | 사건 기록 | 핵심 | F-08, F-17, F-30 (D-08) |
+
+> 산불 단위 현재 값(공식 대응단계·위기경보·예상 진화시간)은 `incidents`에 둔다. 마을 단위는 `incident_village_statuses`, 자원은 `resource_deployments`가 맡는다. 정정이 어떤 값을 바꿨는지는 `correction_changes`에 남는다.
+
+#### E. 확산 예측·위험도
+
+| 테이블 | 이름 | 담는 것 | 성격 | 구분 | 근거 기능 |
+|---|---|---|---|---|---|
+| `prediction_runs` | 예측 실행 | 「확산 예측 실행」 1회. 기준 화선·입력 기상·상태(실행 중·완료·실패·확정)·결과 파일 위치 | 사건 기록 | 핵심 | F-05, F-09, F-10, F-11 |
+| `spread_slices` | 시간별 확산 범위 | 예측 1회의 P1~P8 누적 범위(실행당 최대 8행) | 사건 기록 | 핵심 | F-05, F-09, F-15~F-28 |
+| `spread_reaches` | 도달 대상 | 예측 1회에서 확산 범위에 든 마을·시설과 처음 도달하는 시각 | 사건 기록 | 핵심 | F-05, F-16, F-19, F-21~F-26 (D-10) |
+| `risk_assessments` | 위험도 | 예측 1회의 P5 기준 위험도 R·요인 점수·변수 상세 | 사건 기록 | 핵심 | F-10, F-15 |
+
+> 위험도 23개 변수 상세는 0.9에 따라 `risk_assessments` 안의 JSONB로 두고 테이블로 나누지 않는다.
+
+#### F. 대응 제안·근거·AI
+
+| 테이블 | 이름 | 담는 것 | 성격 | 구분 | 근거 기능 |
+|---|---|---|---|---|---|
+| `proposals` | 제안서 | 제안서 한 버전(v화선.순번). 기준 예측, 생성 계기(예측 갱신·상황 정정), 판정 대응단계·격상 권고 | 사건 기록 | 핵심 | F-11, F-14, F-15 |
+| `proposal_items` | 제안 항목 | 제안서 안의 발동 항목 하나(S1~S7·E1~E7). 구분·문장·판정 이유·권한·변경 여부 | 사건 기록 | 핵심 | F-11~F-28 |
+| `proposal_item_targets` | 제안 대상 | 항목이 가리키는 마을·시설·도로·자원 하나 = 1행(지도 강조용) | 사건 기록 | 핵심 | F-11, F-16~F-28 |
+| `evidence_documents` | 근거 문서 | 표준매뉴얼·규정·법령 문서 하나와 판본·원문 파일 위치 | 기준 | 핵심 | F-13, LGR-001 |
+| `evidence_chunks` | 근거 청크 | 문서의 절·표 행·조문 단위 조각과 쪽수·조항·요약·적용 항목. FAISS 벡터와 같은 ID | 기준 (재구축 가능) | 핵심 | F-11, F-13, F-29 |
+| `citations` | 근거 인용 | 제안 문장 또는 AI 답변 문장이 청크를 인용한 것 1건(번호 k) | 사건 기록 | 핵심 | F-11, F-13, F-29, TER-001-6 |
+| `chat_messages` | AI 대화 | 질문 또는 답변 메시지 1건. 지정한 제안 항목, 근거 부족·거절·실패 여부 | 사건 기록 | 핵심 | F-29, F-30 |
+| `ai_runs` | AI 처리 기록 | 제안 생성·답변·정정 해석의 단계별 입력·출력·상태·재시도·오류 | 감사 로그 | 지원 | QUR-002-4, ORP-001-3·4 (D-15) |
+
+#### G. 설정 버전
+
+| 테이블 | 이름 | 담는 것 | 성격 | 구분 | 근거 기능 |
+|---|---|---|---|---|---|
+| `config_versions` | 설정 버전 | 위험도 기준표(변수 구간·가중치), 규칙 임계값, 연료 파라미터, 모델·프롬프트의 버전 하나 = 1행 | 기준 | 지원 | DPR-001-3, QUR-002, 0.11·0.13 |
+
+### 2.3 1.4 데이터 묶음 후보 → 테이블
+
+| 후보 (1.4) | 테이블 |
+|---|---|
+| 1 계정 | `users`, `user_sessions` |
+| 2 산불 사건 | `incidents` |
+| 3 신고자 정보 | `incident_reporters` |
+| 4 기관별 접수 기록 | `intake_records` |
+| 5 실측 화선 | `fire_perimeters` |
+| 6 기상 | `weather_observations` |
+| 7 예측 실행 | `prediction_runs` |
+| 8 확산 범위 | `spread_slices` |
+| 9 도달 대상 | `spread_reaches` |
+| 10 위험도 | `risk_assessments` |
+| 11 산불 병합 | `incidents` 자기 참조 (테이블 없음) |
+| 12 현재 상황 값 | `incidents`(산불 단위) + `incident_village_statuses`(마을 단위) + `resource_deployments`(자원) |
+| 13 제안서 | `proposals` |
+| 14 제안 항목 | `proposal_items` |
+| 15 제안 대상 | `proposal_item_targets` |
+| 16 근거 청크 | `evidence_documents`, `evidence_chunks` |
+| 17 근거 인용 | `citations` |
+| 18 AI 대화 | `chat_messages` |
+| 19 상황 정정 | `situation_corrections`, `correction_changes` |
+| 20 진화자원 | `resources`, `resource_deployments` |
+| 21 이벤트 로그 | `event_logs` |
+| 22 AI 처리 기록 | `ai_runs`, `config_versions` |
+| 23 행정경계 | `admin_areas` |
+| 24 마을 | `villages` |
+| 25 시설 | `facilities` |
+| 26 도로 | `roads` |
+| 27 인구 격자 | `population_cells` |
+| (새로 추가) | `incident_areas` (D-19), `dataset_loads` (ORP-002) |
+
+### 2.4 ERD (테이블·관계만)
+
+관계 표기: `||` 정확히 1, `|o` 0 또는 1, `|{` 1개 이상, `o{` 0개 이상. 묶음별로 그리고, 다른 묶음의 테이블은 연결되는 것만 함께 그렸다.
+
+#### 전체 개요 — 산불 사건 중심
+
+```mermaid
+erDiagram
+    admin_areas ||--o{ incidents : "관할"
+    incidents ||--o{ fire_perimeters : "화선 보고"
+    incidents ||--o{ prediction_runs : "예측 실행"
+    fire_perimeters |o--o{ prediction_runs : "기준 화선"
+    prediction_runs ||--o{ spread_slices : "P1~P8"
+    prediction_runs ||--o| risk_assessments : "P5 위험도"
+    prediction_runs ||--o{ proposals : "제안서 생성"
+    proposals ||--o{ proposal_items : "발동 항목"
+    proposal_items ||--o{ citations : "근거 인용"
+    evidence_chunks ||--o{ citations : "인용됨"
+    incidents ||--o{ chat_messages : "AI 대화"
+    incidents ||--o{ situation_corrections : "상황 정정"
+    situation_corrections |o--o| proposals : "정정으로 생성"
+```
+
+#### A. 계정·감사
+
+```mermaid
+erDiagram
+    admin_areas ||--o{ users : "관할 지역"
+    users ||--o{ user_sessions : "로그인"
+    users |o--o{ event_logs : "행위자"
+    incidents |o--o{ event_logs : "관련 산불"
+```
+
+#### B. 지역·정적 레이어
+
+```mermaid
+erDiagram
+    admin_areas |o--o{ admin_areas : "상위 행정구역"
+    admin_areas ||--o{ villages : "소속"
+    admin_areas ||--o{ facilities : "소재"
+    dataset_loads ||--o{ admin_areas : "적재"
+    dataset_loads ||--o{ villages : "적재"
+    dataset_loads ||--o{ facilities : "적재"
+    dataset_loads ||--o{ roads : "적재"
+    dataset_loads ||--o{ population_cells : "적재"
+```
+
+> `roads`·`population_cells`는 행정구역 경계를 넘을 수 있어 외래키 대신 공간 교차로 연결한다.
+
+#### C. 산불 사건·보고
+
+```mermaid
+erDiagram
+    admin_areas ||--o{ incidents : "관할(발화 지점)"
+    users ||--o{ incidents : "최초 보고"
+    incidents |o--o{ incidents : "병합된 대표 산불"
+    incidents ||--o| incident_reporters : "신고자"
+    incidents ||--o{ intake_records : "기관별 접수"
+    incidents ||--o{ incident_areas : "걸친 지역"
+    admin_areas ||--o{ incident_areas : ""
+    incidents ||--o{ fire_perimeters : "화선 버전"
+    fire_perimeters |o--o| fire_perimeters : "정정한 이전 버전"
+    users ||--o{ fire_perimeters : "보고자"
+    incidents ||--o{ weather_observations : "기상 수신"
+```
+
+#### D. 현재 상황·정정·자원
+
+```mermaid
+erDiagram
+    incidents ||--o{ incident_village_statuses : "마을별 상황"
+    villages ||--o{ incident_village_statuses : ""
+    incidents ||--o{ situation_corrections : "정정 요청"
+    chat_messages ||--o| situation_corrections : "정정 문장"
+    situation_corrections ||--|{ correction_changes : "해석한 변화"
+    admin_areas ||--o{ resources : "소속 지역"
+    resources |o--o{ resource_deployments : "투입된 자원"
+    incidents ||--o{ resource_deployments : "투입"
+    correction_changes |o--o{ resource_deployments : "정정으로 보정"
+```
+
+#### E. 확산 예측·위험도
+
+```mermaid
+erDiagram
+    incidents ||--o{ prediction_runs : "예측 실행"
+    fire_perimeters |o--o{ prediction_runs : "기준 화선(없으면 발화점)"
+    weather_observations |o--o{ prediction_runs : "입력 기상"
+    config_versions ||--o{ prediction_runs : "파라미터 버전"
+    prediction_runs ||--o{ spread_slices : "P1~P8"
+    prediction_runs ||--o{ spread_reaches : "도달 대상"
+    villages |o--o{ spread_reaches : ""
+    facilities |o--o{ spread_reaches : ""
+    prediction_runs ||--o| risk_assessments : "P5 위험도"
+    config_versions ||--o{ risk_assessments : "기준표 버전"
+```
+
+#### F. 대응 제안·근거·AI
+
+```mermaid
+erDiagram
+    prediction_runs ||--o{ proposals : "기준 예측"
+    situation_corrections |o--o| proposals : "정정 계기"
+    config_versions ||--o{ proposals : "규칙·프롬프트 버전"
+    proposals ||--o{ proposal_items : "발동 항목(최대 14)"
+    proposal_items ||--o{ proposal_item_targets : "대상"
+    proposal_items ||--o{ citations : "문장 근거"
+    chat_messages ||--o{ citations : "답변 근거"
+    evidence_documents ||--|{ evidence_chunks : "조각"
+    evidence_chunks ||--o{ citations : "인용됨"
+    incidents ||--o{ chat_messages : "대화"
+    users ||--o{ chat_messages : "질문자"
+    proposal_items |o--o{ chat_messages : "이 항목 질문"
+    proposals |o--o{ ai_runs : "제안 생성 처리"
+    chat_messages |o--o{ ai_runs : "답변·정정 해석 처리"
+```
+
+### 2.5 3단계로 넘긴 구조 문제
+
+테이블 목록은 정했지만, 컬럼을 정할 때 함께 풀어야 하는 구조 문제다.
+
+| # | 문제 | 관련 테이블 |
+|---|---|---|
+| S-01 | 하나의 테이블이 여러 종류를 가리키는 경우(마을·시설·도로·자원)를 외래키 여러 개로 할지, 종류+ID로 할지 | `proposal_item_targets`, `spread_reaches`, `correction_changes` |
+| S-02 | 인용이 「제안 항목」 또는 「AI 답변」 중 한쪽만 가리키게 하는 제약, 문장 번호 표현(D-12) | `citations` |
+| S-03 | 질문과 답변을 한 행에 둘지, 메시지 2행으로 둘지 | `chat_messages` |
+| S-04 | 제안서 버전을 산불별로 유일하게 하려면 `proposals`에 산불 참조를 중복으로 둘지 | `proposals` |
+| S-05 | 행정구역 코드 체계(행정표준코드·SGIS 코드) 대응표가 필요한지 | `admin_areas` |
+| S-06 | 정적 레이어를 다시 적재할 때 기존 ID를 유지하는 방법(과거 제안서의 대상이 가리키고 있음) | `villages`, `facilities`, `dataset_loads` |
 
 ## 3. 테이블 정의
 
