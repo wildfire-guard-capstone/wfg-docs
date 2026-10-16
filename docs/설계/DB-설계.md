@@ -112,7 +112,10 @@
 
 ### 0.8 상태·구분 값 저장 방식
 
-- PostgreSQL `ENUM` 타입 대신 **`text` + `CHECK (... IN (...))`**로 둔다(D-02). 값을 추가·변경할 때 마이그레이션이 단순하다.
+- 값은 영어 대문자 코드로 저장하고, 한글은 화면 라벨로 붙인다.
+- **`users.role`은 PostgreSQL `ENUM` 타입(`user_role`)으로 둔다**(2026-10-16 팀장 결정). 값이 4개로 고정되고 바뀔 일이 거의 없으며, 타입 자체가 허용 값을 문서화한다.
+- 나머지 상태·구분 값(산불 진행상태, 예측 상태, 이벤트 구분 등)을 ENUM으로 통일할지, `text` + `CHECK`로 둘지는 D-02에서 정한다.
+  - 참고: ENUM은 값 **추가**는 `ALTER TYPE ... ADD VALUE`로 쉽지만, 값 **삭제·이름 변경**은 타입을 다시 만들어야 한다.
 - 값 목록은 3단계 테이블 정의에서 컬럼마다 확정한다.
 
 ### 0.9 JSONB 사용 기준
@@ -587,6 +590,7 @@ erDiagram
 - 타입은 PostgreSQL 기준. 문자열은 길이 제한이 꼭 필요할 때만 `varchar(n)`, 그 밖에는 `text`(+ 필요하면 CHECK).
 - 「근거」 열은 그 컬럼이 필요한 기능·요구사항이다. 근거가 없는 컬럼은 만들지 않는다.
 - 다른 묶음의 테이블은 상세 ERD에 `id`만 적어 연결만 보여 준다.
+- **🟡 보류** — 넣을지 뺄지 애매한 컬럼. 일단 표에 남겨 두고, 테이블 아래 「🟡 보류 컬럼」 상자에 ① 왜 넣었는지 ② 왜 빼려고 하는지 ③ 무엇을 보고 정할지를 적는다. 팀이 정하면 표시를 지우고 결과를 「6. 결정 기록」에 남긴다.
 
 ### 3.1 A. 계정·감사
 
@@ -604,8 +608,8 @@ erDiagram
         text password_hash "bcrypt/argon2 해시"
         varchar(50) name "이름"
         varchar(100) organization "소속"
-        text role "COMMANDER·VIEWER·REPORTER·ADMIN"
-        bigint admin_area_id FK "관할 지역(ADMIN은 NULL=전체)"
+        user_role role "ENUM: COMMANDER·VIEWER·REPORTER·ADMIN"
+        bigint admin_area_id FK "🟡 보류 - 관할 지역"
         smallint failed_login_count "연속 실패 횟수(5 이상 = 잠김)"
         timestamptz created_at "발급 시각"
         timestamptz updated_at "마지막 변경 시각"
@@ -616,12 +620,12 @@ erDiagram
         bigint id PK
         timestamptz occurred_at "발생 시각"
         text category "화면 구분"
-        varchar(50) action "세부 동작 코드"
+        varchar(50) action "🟡 보류 - 세부 동작 코드"
         text message "화면 표시 내용"
         bigint user_id FK "행위자(시스템은 NULL)"
         bigint incident_id FK "관련 산불(없으면 NULL)"
-        varchar(50) target_table "대상 테이블"
-        bigint target_id "대상 행 id"
+        varchar(50) target_table "🟡 보류 - 대상 테이블"
+        bigint target_id "🟡 보류 - 대상 행 id"
         jsonb details "부가 정보"
     }
 
@@ -645,8 +649,8 @@ erDiagram
 | `password_hash` | text | N | | | 비밀번호 해시. 원문은 저장하지 않음 | SER-003-3 |
 | `name` | varchar(50) | N | | | 이름 | F-01, 프로토 39쪽 |
 | `organization` | varchar(100) | N | | | 소속 기관 | 프로토 39쪽 |
-| `role` | text | N | | CHECK `IN ('COMMANDER','VIEWER','REPORTER','ADMIN')` | 권한: 조작·열람·보고·관리 | SER-001 |
-| `admin_area_id` | bigint | Y | | FK → `admin_areas.id`<br>CHECK `role = 'ADMIN' OR admin_area_id IS NOT NULL` | 관할 지역(시군구). 전산 관리자만 NULL 허용(= 전체) | 0.13, D-04 |
+| `role` | `user_role` (ENUM) | N | | `CREATE TYPE user_role AS ENUM ('COMMANDER','VIEWER','REPORTER','ADMIN')` | 권한: 조작(통합지휘권자)·열람(열람자)·보고(상황 보고자)·관리(전산 관리자) | SER-001 |
+| 🟡 `admin_area_id` | bigint | Y | | FK → `admin_areas.id`<br>CHECK `role = 'ADMIN' OR admin_area_id IS NOT NULL` | **보류.** 관할 지역(시군구). 전산 관리자만 NULL 허용(= 전체) | (직접 요구 없음) D-24 |
 | `failed_login_count` | smallint | N | `0` | CHECK `>= 0` | 연속 로그인 실패 횟수. **5 이상이면 잠김**, 로그인 성공·관리자 잠금 해제 시 0 | SER-001-7 |
 | `created_at` | timestamptz | N | `now()` | | 발급 시각 | F-01 |
 | `updated_at` | timestamptz | N | `now()` | | 마지막 변경 시각 | 0.6 |
@@ -655,7 +659,15 @@ erDiagram
 인덱스
 
 - `UNIQUE (lower(login_id))` — 대소문자만 다른 아이디 금지 [D-21]. 회수된 계정의 아이디도 재사용하지 않음(이력 혼동 방지)
-- `(admin_area_id, role) WHERE deleted_at IS NULL` — 관할별 사용 중 계정 목록, 마지막 통합지휘권자 검사
+- 🟡 `(admin_area_id, role) WHERE deleted_at IS NULL` — 관할별 사용 중 계정 목록, 마지막 통합지휘권자 검사 (`admin_area_id`를 빼면 `(role) WHERE deleted_at IS NULL`)
+
+> [!WARNING]
+> **🟡 보류 컬럼 — `admin_area_id` (관할 지역)** [D-24]
+>
+> - **왜 넣었나**: ① D-04에서 여러 지역을 지원하기로 했으니 사용자도 담당 지역이 있어야 한다고 봤다. ② 통합지휘권자는 해당 시·군·구의 시장·군수·구청장이라, 법적으로 자기 관할 산불만 지휘한다. ③ 「마지막 통합지휘권자 보호」(A-6)를 지역마다 적용하려면 관할이 필요하다. ④ 분석서 모델에도 `sigungu_code`가 있었다.
+> - **왜 빼려 하나**: ① 이 컬럼을 직접 요구하는 기능 요구사항이 없다. F-01·SER-001은 권한(조작·열람·보고·관리) 구분만 요구한다. ② MVP 시연은 한 지역이라 모든 사용자가 모든 산불을 봐도 문제가 없다. ③ 제대로 하려면 컬럼 하나로 부족하다. 도 단위 상급 본부 열람자는 여러 시·군을 보고, 산불이 시·군 경계를 넘으면 관할이 바뀐다(D-19). ④ 나중에 NULL 허용 컬럼으로 추가하기 쉽다.
+> - **빼도 지켜지는 것**: 공용 스키마(0.13)는 산불·마을·시설 같은 **데이터**의 행정구역 코드로 지켜진다. 사용자 관할은 「누가 무엇을 볼 수 있나」라는 **권한** 문제라 별개다.
+> - **무엇을 보고 정하나**: MVP에서 「지역별로 보이는 산불을 나눈다」를 시연할지. 안 한다면 빼고, A-6은 「시스템 전체의 마지막 통합지휘권자」로 바꾼다.
 
 MVP에서 뺀 컬럼과 대신하는 방법
 
@@ -665,7 +677,7 @@ MVP에서 뺀 컬럼과 대신하는 방법
 | `is_locked`, `locked_at` | `failed_login_count >= 5`이면 잠김 |
 | `token_version` | API 요청마다 `users` 행을 읽어 `deleted_at`·`role`을 확인하므로 회수·권한 변경이 바로 적용됨 |
 | `last_login_at` | 필요하면 `event_logs`의 `LOGIN_SUCCESS`로 조회 |
-| `created_by`, `updated_by` | 누가 발급·변경했는지는 `event_logs`(`ADMIN` 구분, `target_table = 'users'`)에 남음 |
+| `created_by`, `updated_by` | 누가 발급·변경했는지는 `event_logs`(`ADMIN` 구분)에 남음. 대상 계정은 `target_id` 또는 `details`로 찾음 (D-26) |
 | `revoked_at` | `deleted_at`으로 통합 |
 
 #### `event_logs` — 이벤트 로그
@@ -677,12 +689,12 @@ MVP에서 뺀 컬럼과 대신하는 방법
 | `id` | bigint | N | identity | PK | 로그 ID | 0.3 |
 | `occurred_at` | timestamptz | N | `now()` | | 발생 시각 | F-32, ORP-001-2 |
 | `category` | text | N | | CHECK `IN ('AUTH','INPUT','PREDICTION','PROPOSAL','NO_EVIDENCE','CORRECTION','CLOSE','ADMIN','SYSTEM')` | 화면의 「구분」: 로그인·입력·예측·제안·근거 부족·정정·종료·관리·시스템 | F-32, 프로토 36쪽 |
-| `action` | varchar(50) | N | | | 세부 동작 코드. 예: `LOGIN_SUCCESS`, `LOGIN_FAILED`, `ACCOUNT_LOCKED`, `PERIMETER_REPORTED`, `PROPOSAL_CREATED`. 목록은 아래 | ORP-001-1 |
+| 🟡 `action` | varchar(50) | N | | | **보류.** 세부 동작 코드. 예: `LOGIN_SUCCESS`, `LOGIN_FAILED`, `ACCOUNT_LOCKED`, `PERIMETER_REPORTED`, `PROPOSAL_CREATED`. 목록은 아래 | ORP-001-1, D-25 |
 | `message` | text | N | | | 화면에 그대로 보이는 한 줄. 예: 「대응 제안 v1.2 생성(상황 정정) · 변경 2건」 | F-32 |
 | `user_id` | bigint | Y | | FK → `users.id` | 행위자. 시스템 이벤트·없는 아이디로 로그인 실패는 NULL | ORP-001-2 |
 | `incident_id` | bigint | Y | | FK → `incidents.id` | 관련 산불. 로그인·계정 관리 이벤트는 NULL | F-32 |
-| `target_table` | varchar(50) | Y | | CHECK `(target_table IS NULL) = (target_id IS NULL)` | 이벤트가 만든·바꾼 행의 테이블. 예: `proposals` | 0.11 |
-| `target_id` | bigint | Y | | | 그 행의 id | 0.11 |
+| 🟡 `target_table` | varchar(50) | Y | | CHECK `(target_table IS NULL) = (target_id IS NULL)` | **보류.** 이벤트가 만든·바꾼 행의 테이블. 예: `proposals` | 0.11, D-26 |
+| 🟡 `target_id` | bigint | Y | | | **보류.** 그 행의 id | 0.11, D-26 |
 | `details` | jsonb | Y | | | 부가 정보. 예: 로그인 실패 시 시도한 아이디, 변경 전후 권한. **개인정보(신고자 성명·연락처)는 넣지 않음** | 0.9, 0.12 |
 
 인덱스
@@ -706,6 +718,20 @@ MVP에서 뺀 컬럼과 대신하는 방법
 | `SYSTEM` | `WEATHER_FETCH_FAILED`, `EXTERNAL_FAILED` |
 
 > `action`은 코드가 계속 늘어날 수 있어 CHECK를 걸지 않고 애플리케이션 상수로 관리한다. 화면 필터는 `category`로 한다.
+
+> [!WARNING]
+> **🟡 보류 컬럼 — `action` (세부 동작 코드)** [D-25]
+>
+> - **왜 넣었나**: `category`는 화면용 9종이라 「로그인 성공·실패·잠김」이 모두 `AUTH`로 묶인다. 로그인 실패만 세거나 특정 동작을 골라 보려면 세부 코드가 있어야 한다(ORP-001-1의 이벤트 종류 구분).
+> - **왜 빼려 하나**: 화면(프로토 36쪽)은 구분·내용·사용자·시각만 보여 주고 세부 코드를 쓰지 않는다. 같은 정보가 `message` 문장에도 들어 있다. 코드 목록을 계속 관리해야 하는 부담이 있다.
+> - **무엇을 보고 정하나**: 이벤트 로그를 코드에서 조건으로 검색할 일이 있는지(예: 로그인 실패 통계, 테스트에서 특정 이벤트 기록 여부 검사 — TER-001). 있으면 남긴다.
+
+> [!WARNING]
+> **🟡 보류 컬럼 — `target_table`, `target_id` (대상 행)** [D-26]
+>
+> - **왜 넣었나**: 이벤트가 만들거나 바꾼 행을 정확히 가리키려고. 예: 「대응 제안 v1.2 생성」 로그에서 그 제안서로 바로 이동, 「권한 변경」 로그에서 어느 계정인지 확인. `users`의 `created_by`·`updated_by`를 뺀 대신 「누가 이 계정을 바꿨나」도 이 컬럼으로 찾는다.
+> - **왜 빼려 하나**: 화면에 「로그 → 해당 화면으로 이동」 기능이 없다(프로토 36쪽). 한 컬럼이 여러 테이블을 가리켜 외래키를 걸 수 없다. 대상은 `message`나 `details`에도 적을 수 있다.
+> - **무엇을 보고 정하나**: 「이 계정·제안서에 무슨 일이 있었나」를 거꾸로 찾는 조회가 필요한지. 필요 없으면 빼고 `details`에 대상 id를 넣는다.
 
 #### 규칙
 
@@ -753,7 +779,7 @@ MVP에서 뺀 컬럼과 대신하는 방법
 | R-02 | 0 | 모든 기본키를 bigint 대리키로 | 산불 사건 `id`가 문자열(`F-2025-0322-01`), 마을·시설도 문자열 | 표시 번호 규칙이 바뀌어도 외래키가 영향을 받지 않는다. 표시 번호는 별도 컬럼으로 |
 | R-03 | 0 | 근거 청크를 PostgreSQL로 (D-03 확정 시) | ECR-003은 SQLite 청크 테이블 + FAISS, 6장은 citations → evidence_chunks 외래키(RESTRICT) | 두 설계가 서로 맞지 않는다. 외래키를 유지하려면 같은 DB에 있어야 한다 |
 | R-04 | 0 | 제안서 버전을 정수 2개로 | `version` 단일 번호(버전 n) | 프로토타입에서 `v화선.순번` 규칙으로 바뀜(보고서 48쪽) |
-| R-05 | 0 | 상태값은 영어 코드 + CHECK | 한글 값(발급·회수, 접수·진행 중·종료) 과 영어 enum(COMMANDER·RUNNING)이 섞여 있음 | 한 가지 규칙으로 통일하고, 한글은 화면 라벨로 |
+| R-05 | 0 | 상태값은 영어 코드로 통일 (`role`은 ENUM, 나머지는 D-02) | 한글 값(발급·회수, 접수·진행 중·종료) 과 영어 enum(COMMANDER·RUNNING)이 섞여 있음 | 한 가지 규칙으로 통일하고, 한글은 화면 라벨로 |
 
 ## 7. 결정이 필요한 항목
 
@@ -762,7 +788,7 @@ MVP에서 뺀 컬럼과 대신하는 방법
 | # | 질문 | 선택지 | 추천 |
 |---|---|---|---|
 | D-01 | 저장 좌표계 | ① EPSG:5179 통일 ② EPSG:4326 통일(면적·거리는 geography로 계산) | ① — 격자·ELMFIRE와 단위가 같고 면적·거리 계산이 단순 |
-| D-02 | 상태값 저장 방식 | ① text + CHECK ② PostgreSQL ENUM ③ 코드 테이블 | ① — 값 추가가 쉬움. 값이 화면에서 관리되어야 하면 ③ |
+| D-02 | 상태값 저장 방식 | ① text + CHECK ② PostgreSQL ENUM ③ 코드 테이블 | **`users.role`은 ② 확정** (2026-10-16 팀장 결정). 나머지 상태값도 ②로 통일할지 결정 필요 — 통일하면 규칙이 하나라 단순함 |
 | D-03 | 근거 청크 저장 위치 | ① PostgreSQL(FAISS는 벡터만) ② ECR-003대로 SQLite | ① — 인용 외래키 유지. 채택하면 ECR-003 문구 수정 필요 |
 | D-04 | 관할 범위 | ① 처음부터 여러 지역 지원(사건·계정·자원·레이어에 행정구역 코드) ② 의성군 단일로 시작 | **확정: ①** (2026-10-16 팀장 결정) — 0.13 지역 독립 원칙 |
 | D-05 | AI 평가 데이터 위치 | ① 같은 DB의 별도 스키마(`eval`) ② 파일(CSV/JSON) ③ 이번 범위에서 제외 | ③ 후 SP5 전에 결정 — 운영 스키마부터 확정 |
@@ -784,3 +810,6 @@ MVP에서 뺀 컬럼과 대신하는 방법
 | D-21 | 로그인 아이디 대소문자 | ① 구분 안 함 ② 구분 | ① — `CMD01`과 `cmd01`이 다른 계정이 되는 혼란 방지 |
 | D-22 | 재발급 후 비밀번호 변경 강제 | ① 강제(`must_change_password` 추가) ② 강제 안 함 | ② — 요구사항에 없음. 필요하면 컬럼 하나로 추가 가능 |
 | D-23 | 이벤트 로그에 접속 IP 기록 | ① 기록 ② 기록 안 함 | ② — 요구사항(SER-003-4)은 사용자·시각만 요구. 필요하면 `details`에 추가 |
+| 🟡 D-24 | `users.admin_area_id`(관할 지역) | ① 유지 ② MVP에서 빼고 나중에 지역별 권한을 따로 설계 | ② 추천 — 3.1 보류 상자 참고 |
+| 🟡 D-25 | `event_logs.action`(세부 코드) | ① 유지 ② 빼고 `category`·`message`만 | 팀 판단 — 코드로 로그를 검색할 일이 있는지 |
+| 🟡 D-26 | `event_logs.target_table`·`target_id` | ① 유지 ② 빼고 `details`에 대상 id | ② 추천 — 화면에 로그→대상 이동 기능 없음 |
