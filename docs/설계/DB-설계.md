@@ -144,10 +144,10 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | `official_stage` | `response_stage` ENUM | NN, 기본 `INITIAL` | 공식 대응단계: `INITIAL`(초기대응)·`STAGE1`·`STAGE2`(확산대응 1·2단계) |
 | `alert_level` | `alert_level` ENUM | NN, 기본 `ATTENTION` | 위기경보: `ATTENTION`(관심)·`CAUTION`(주의)·`ALERT`(경계)·`SERIOUS`(심각) |
 | `situation` | jsonb | NN, 기본 `{}` | **현재 상황**(아래). 상황 정정으로 바뀜 |
-| `reported_by` | bigint | NN, FK → `users` | 최초 보고자 |
+| `reported_by` | bigint | NN, FK → `users` | 이 산불을 시스템에 **처음 등록한 상황 보고자 계정**. 119에 신고한 사람(`reporter_name`)과 다름 |
 | `created_at` | timestamptz | NN, 기본 now() | 등록 시각 |
 | `ended_at` | timestamptz | | 종료 시각 |
-| `ended_by` | bigint | FK → `users` | 종료 처리자 |
+| `ended_by` | bigint | FK → `users` | 종료 처리한 통합지휘권자 계정. 산불현황에 「종료 18:00 · cmd01」로 표시 |
 
 `situation` 형태 — 마을 키는 `villages.id`:
 
@@ -190,7 +190,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | `version_no` | int | NN | 화선 버전 v1, v2 … |
 | `geom` | geometry(MultiPolygon, 5179) | NN | 실측 연소 범위 |
 | `observed_at` | timestamptz | NN | 관측 시각 |
-| `reported_by` | bigint | NN, FK → `users` | 보고자 |
+| `reported_by` | bigint | NN, FK → `users` | 이 화선을 그린 상황 보고자 계정. 산불현황 화선 줄에 「11:55 rep01」로 표시 |
 | `created_at` | timestamptz | NN, 기본 now() | 등록 시각 |
 | `corrected_at` | timestamptz | | 정정된 시각. NULL이면 유효 |
 
