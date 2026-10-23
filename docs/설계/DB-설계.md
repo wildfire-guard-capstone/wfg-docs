@@ -12,7 +12,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | 단계 | 내용 | 상태 |
 |---|---|---|
 | 1 | 기능 정리 — DB가 받쳐 줘야 할 기능 | **완료** |
-| 2 | 테이블 정의 — 묶음별로 테이블과 컬럼을 함께 정의 | **진행 중** (계정 초안) |
+| 2 | 테이블 정의 — 묶음별로 테이블과 컬럼을 함께 정의 | **진행 중** (계정·산불 보고 초안) |
 | 3 | ERD | 대기 |
 | 4 | 기능 → 테이블 검증 | 대기 |
 
@@ -119,6 +119,100 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | `incident_id` | bigint | FK → `incidents` | 어느 산불. 로그인·계정 관리는 NULL |
 | `action` | varchar(50) | NN | 무엇을. 예: `LOGIN_FAILED`, `PERIMETER_REPORTED`, `PROPOSAL_CREATED`, `ITEM_NO_EVIDENCE` |
 | `details` | jsonb | | 세부 사실(대상 id, 버전, 변경 전후 값). **개인정보는 넣지 않음** |
+
+### 2.2 산불·보고
+
+상황 보고자는 지도에 **발화 지점을 점 하나로 찍고**, 이후 점을 여러 개 찍어 **산불 범위를 폴리곤으로** 그린다. 점은 `incidents`, 폴리곤은 `fire_perimeters`에 저장한다. 첫 보고에서 점만 찍고 폴리곤은 나중에 그려도 되고(초기대응), 둘을 같이 보고해도 된다.
+
+#### `incidents` — 산불 사건
+
+**어떤 테이블**: 산불 하나 = 1행. 보고 내용·진행상태·**현재 상황**을 담는다. 산불명과 주소는 따로 입력받지 않고 발화 지점의 행정구역과 날짜로 만들어 보여 준다(예: 「의성군 안평면 산불 (2025-03-22)」).
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| `id` | bigint | PK | |
+| `ignition_point` | geometry(Point, 5179) | NN | 발화 지점. 보고자가 지도에 찍음 |
+| `admin_area_id` | bigint | NN, FK → `admin_areas` | 발화 지점이 속한 **읍면동**(저장 시 자동 계산). 상위 시군구가 관할 |
+| `started_at` | timestamptz | | 발생 일시(선택) |
+| `reported_at` | timestamptz | NN | 신고 접수 일시 |
+| `report_text` | text | | 신고 내용 |
+| `reporter_org` | varchar(100) | | 신고 기관명(선택) |
+| `reporter_name` | varchar(50) | | 신고자 성명(선택) |
+| `reporter_phone` | varchar(20) | | 신고자 연락처(선택) |
+| `intake_records` | jsonb | | 기관별 접수 기록 `[{"org", "received_at", "channel"}]`(선택) |
+| `status` | `incident_status` ENUM | NN, 기본 `RECEIVED` | `RECEIVED`(접수)·`IN_PROGRESS`(진행 중)·`ENDED`(종료) |
+| `official_stage` | `response_stage` ENUM | NN, 기본 `INITIAL` | 공식 대응단계: `INITIAL`(초기대응)·`STAGE1`·`STAGE2`(확산대응 1·2단계) |
+| `alert_level` | `alert_level` ENUM | NN, 기본 `ATTENTION` | 위기경보: `ATTENTION`(관심)·`CAUTION`(주의)·`ALERT`(경계)·`SERIOUS`(심각) |
+| `situation` | jsonb | NN, 기본 `{}` | **현재 상황**(아래). 상황 정정으로 바뀜 |
+| `reported_by` | bigint | NN, FK → `users` | 최초 보고자 |
+| `created_at` | timestamptz | NN, 기본 now() | 등록 시각 |
+| `ended_at` | timestamptz | | 종료 시각 |
+| `ended_by` | bigint | FK → `users` | 종료 처리자 |
+
+`situation` 형태 — 마을 키는 `villages.id`:
+
+```json
+{
+  "villages": { "1024": { "evacuated": true, "evac_order": true, "injured_or_isolated": 0 } },
+  "deployed": { "helicopter": 6, "fire_truck": 12, "crew": 80 },
+  "expected_hours": 5,
+  "disaster_sms_sent": true
+}
+```
+
+**데이터가 쌓이는 방식**
+
+- 새 산불 보고 → 1행 INSERT(`RECEIVED`)
+- 첫 실측 화선이 들어오면 → `status = IN_PROGRESS`
+- 상황 정정을 확인하면 → `official_stage`·`alert_level`·`situation` UPDATE(정정 이력은 `situation_corrections`에 쌓임)
+- 종료 → `status = ENDED`, `ended_at`·`ended_by`
+- 삭제하지 않는다. 산불 하나당 행은 계속 1개
+
+**기능에서 쓰이는 곳**
+
+| 기능 | 사용 |
+|---|---|
+| F-02 산불 보고 | INSERT |
+| F-04 산불현황 | 발생·신고·신고자·접수 기록·진행상태·공식 단계 읽기 |
+| F-05 지도 | 발화 지점 표시 |
+| F-09 예측 | 화선이 없으면 발화 지점에서 시작 |
+| F-11·F-15 제안 | 공식 단계와 판정 단계 비교(격상 권고), `situation`을 규칙 판정 입력으로 |
+| F-30 정정 | `official_stage`·`alert_level`·`situation` UPDATE |
+| F-03 종료 | `status`. 이후 보고·예측·정정 차단의 기준 |
+
+#### `fire_perimeters` — 실측 화선
+
+**어떤 테이블**: 상황 보고자가 점을 이어 그린 **산불 범위 1건 = 1행**. 찍은 점들은 폴리곤 하나로 저장한다.
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| `id` | bigint | PK | |
+| `incident_id` | bigint | NN, FK → `incidents` | |
+| `version_no` | int | NN | 화선 버전 v1, v2 … |
+| `geom` | geometry(MultiPolygon, 5179) | NN | 실측 연소 범위 |
+| `observed_at` | timestamptz | NN | 관측 시각 |
+| `reported_by` | bigint | NN, FK → `users` | 보고자 |
+| `created_at` | timestamptz | NN, 기본 now() | 등록 시각 |
+| `corrected_at` | timestamptz | | 정정된 시각. NULL이면 유효 |
+
+- 유일: `(incident_id, version_no) WHERE corrected_at IS NULL` — 한 버전에 유효한 화선은 하나
+- 면적(ha)은 저장하지 않고 `ST_Area`로 계산
+
+**데이터가 쌓이는 방식**
+
+- 새 보고 → 다음 번호로 1행 INSERT. 1시간마다 보고하므로 8시간이면 산불 하나에 약 8행
+- 정정 → 기존 행에 `corrected_at` 기록 + **같은 버전 번호로 새 행** INSERT. 원래 행은 남김
+
+**기능에서 쓰이는 곳**
+
+| 기능 | 사용 |
+|---|---|
+| F-02 화선 보고·정정 | INSERT, 정정 시 `corrected_at` |
+| F-05 지도 | 최신 유효 화선·이전 버전 표시 |
+| F-04 산불현황 | 최신 화선 버전·면적 |
+| F-09 예측 | 최신 유효 화선을 시작점으로 |
+| 「재예측 필요」 | 최신 화선 버전 > 마지막 예측의 기준 화선 버전이면 표시 |
+| F-11 제안서 버전 | `v(화선 버전).(순번)`의 앞 번호 |
 
 ## 3. ERD
 
