@@ -12,10 +12,9 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | 단계 | 내용 | 상태 |
 |---|---|---|
 | 1 | 기능 정리 — DB가 받쳐 줘야 할 기능 | **완료** |
-| 2 | 테이블 목록 | 대기 |
-| 3 | 테이블별 컬럼 | 대기 |
-| 4 | ERD | 대기 |
-| 5 | 기능 → 테이블 검증 | 대기 |
+| 2 | 테이블 정의 — 묶음별로 테이블과 컬럼을 함께 정의 | **진행 중** (계정 초안) |
+| 3 | ERD | 대기 |
+| 4 | 기능 → 테이블 검증 | 대기 |
 
 ## 설계 원칙
 
@@ -78,18 +77,53 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | 데이터 자원 D-02~D-05 | 행정경계·집계구·인구는 SGIS(전국, EPSG:5179), 마을은 법정리 단위이고 리별 인구는 법정동코드 10자리 | 행정구역은 SGIS 코드 기준, 마을은 법정동코드로 연결 |
 | 7주차-1차 회의 | 위험도의 도로 접근성 변수 제외 | 위험도 계산에 도로 전체 좌표가 필수는 아님 |
 
-## 2. 테이블 목록
+## 2. 테이블 정의
+
+묶음 하나씩 정의한다. 표기: `NN` = NOT NULL, `PK`·`FK`·`UK` = 기본키·외래키·유일. 다른 묶음 테이블을 가리키는 FK는 그 묶음에서 테이블이 정해질 때 연결된다.
+
+### 2.1 계정
+
+#### `users` — 계정
+
+사용자 한 명 = 1행. 전산 관리자가 발급하고 회원가입은 없다.
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| `id` | bigint | PK | |
+| `login_id` | varchar(50) | NN, UK(대소문자 무시) | 로그인 아이디. 예: `cmd01` |
+| `password_hash` | text | NN | 비밀번호 해시 |
+| `name` | varchar(50) | NN | 이름 |
+| `organization` | varchar(100) | NN | 소속 기관 |
+| `role` | `user_role` ENUM | NN | `COMMANDER`(통합지휘권자)·`VIEWER`(열람자)·`REPORTER`(상황 보고자)·`ADMIN`(전산 관리자) |
+| `admin_area_id` | bigint | FK → `admin_areas` | 관할 시군구. 전산 관리자만 NULL(전체) |
+| `failed_login_count` | smallint | NN, 기본 0 | 연속 로그인 실패 횟수. **5 이상이면 잠김** |
+| `created_at` | timestamptz | NN, 기본 now() | 발급 시각 |
+| `updated_at` | timestamptz | NN, 기본 now() | 마지막 변경 시각 |
+| `deleted_at` | timestamptz | | 회수·삭제 시각. **NULL이면 사용 중** |
+
+- 로그인 거부: `deleted_at`이 있거나 `failed_login_count >= 5`
+- 잠금 해제는 전산 관리자가 `failed_login_count = 0`으로
+- 회수·삭제는 행을 지우지 않고 `deleted_at`만 기록(이벤트 로그·산불이 계정을 가리킴)
+- 관할의 마지막 통합지휘권자는 회수·권한 변경 불가
+- API 요청마다 `users` 행을 읽어 권한·회수 여부를 확인(JWT만 쓰고 세션 테이블은 두지 않음)
+
+#### `event_logs` — 이벤트 로그
+
+**누가, 언제, 어느 산불에서, 무엇을 했는지** 1건 = 1행. **추가만** 한다(수정·삭제 권한 회수). 화면에 보이는 구분·문장은 저장하지 않고 조회할 때 `action`·`details`로 만든다.
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| `id` | bigint | PK | |
+| `created_at` | timestamptz | NN, 기본 now() | 언제 |
+| `user_id` | bigint | FK → `users` | 누가. 시스템 이벤트는 NULL |
+| `incident_id` | bigint | FK → `incidents` | 어느 산불. 로그인·계정 관리는 NULL |
+| `action` | varchar(50) | NN | 무엇을. 예: `LOGIN_FAILED`, `PERIMETER_REPORTED`, `PROPOSAL_CREATED`, `ITEM_NO_EVIDENCE` |
+| `details` | jsonb | | 세부 사실(대상 id, 버전, 변경 전후 값). **개인정보는 넣지 않음** |
+
+## 3. ERD
 
 (다음 단계)
 
-## 3. 테이블별 컬럼
-
-(다음 단계)
-
-## 4. ERD
-
-(다음 단계)
-
-## 5. 기능 → 테이블 검증
+## 4. 기능 → 테이블 검증
 
 (다음 단계)
