@@ -133,14 +133,14 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | `id` | bigint | PK | |
 | `ignition_point` | geometry(Point, 5179) | NN | 발화 지점. 보고자가 지도에 찍음 |
 | `admin_area_id` | bigint | NN, FK → `admin_areas` | 발화 지점이 속한 **읍면동**(저장 시 자동 계산). 상위 시군구가 관할 |
-| `started_at` | timestamptz | | 발생 일시(선택) |
+| `started_at` | timestamptz | | 발생 일시. 모를 수 있어 NULL 허용 |
 | `reported_at` | timestamptz | NN | 신고 접수 일시 |
 | `report_text` | text | | 신고 내용 |
 | `reporter_org` | varchar(100) | | 신고 기관명(선택) |
-| `reporter_name` | varchar(50) | | 신고자 성명(선택) |
-| `reporter_phone` | varchar(20) | | 신고자 연락처(선택) |
+| `reporter_name` | varchar(50) | NN | 신고자 성명(규정 제6조제1항제1호). 모르면 「미상」 입력 |
+| `reporter_phone` | varchar(20) | NN | 신고자 연락처(규정 제6조제1항제1호). 모르면 「미상」 입력 |
 | `intake_records` | jsonb | | 기관별 접수 기록 `[{"org", "received_at", "channel"}]`(선택) |
-| `status` | `incident_status` ENUM | NN, 기본 `RECEIVED` | `RECEIVED`(접수)·`IN_PROGRESS`(진행 중)·`ENDED`(종료) |
+| `status` | `incident_status` ENUM | NN, 기본 `IN_PROGRESS` | `IN_PROGRESS`(진행 중)·`ENDED`(종료). 화선이 아직 없는지는 `fire_perimeters` 행 유무로 판단 |
 | `official_stage` | `response_stage` ENUM | NN, 기본 `INITIAL` | 공식 대응단계: `INITIAL`(초기대응)·`STAGE1`·`STAGE2`(확산대응 1·2단계) |
 | `alert_level` | `alert_level` ENUM | NN, 기본 `ATTENTION` | 위기경보: `ATTENTION`(관심)·`CAUTION`(주의)·`ALERT`(경계)·`SERIOUS`(심각) |
 | `situation` | jsonb | NN, 기본 `{}` | **현재 상황**(아래). 상황 정정으로 바뀜 |
@@ -162,8 +162,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 
 **데이터가 쌓이는 방식**
 
-- 새 산불 보고 → 1행 INSERT(`RECEIVED`)
-- 첫 실측 화선이 들어오면 → `status = IN_PROGRESS`
+- 새 산불 보고 → 1행 INSERT(`IN_PROGRESS`)
 - 상황 정정을 확인하면 → `official_stage`·`alert_level`·`situation` UPDATE(정정 이력은 `situation_corrections`에 쌓임)
 - 종료 → `status = ENDED`, `ended_at`·`ended_by`
 - 삭제하지 않는다. 산불 하나당 행은 계속 1개
