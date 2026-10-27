@@ -12,7 +12,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | 단계 | 내용 | 상태 |
 |---|---|---|
 | 1 | 기능 정리 — DB가 받쳐 줘야 할 기능 | **완료** |
-| 2 | 테이블 정의 — 묶음별로 테이블과 컬럼을 함께 정의 | **진행 중** (계정·산불 보고·예측·제안 초안) |
+| 2 | 테이블 정의 — 묶음별로 테이블과 컬럼을 함께 정의 | **진행 중** (계정·산불 보고·예측·제안·제안 다루기 초안) |
 | 3 | ERD | 대기 |
 | 4 | 기능 → 테이블 검증 | 대기 |
 
@@ -48,7 +48,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | **핵심 ① 예측** | 확산 예측 실행 | F-09, F-05 | 최신 화선(화선이 없으면 발화점 = 화선 v0)과 기상으로 P1~P8 계산·지도 표시 |
 | **핵심 ② 위험도** | 위험도 계산·조회 | F-10 | 예측마다 P5 범위의 23개 변수로 위험도 R 1개 |
 | **핵심 ③ 제안** | 제안서 생성 | F-11, F-12, F-15~F-28 | 규칙 판정 → 근거 검색 → 진화 7·대피 7 항목 문장, 버전 `v화선.순번` |
-| **제안 다루기** | 근거 조회 | F-13 | 문장의 근거 번호 → 매뉴얼 쪽·항목·요약 |
+| **제안 다루기** | 근거 조회 | F-13 | 문장의 근거 번호 → 매뉴얼 쪽·항목·본문 |
 | | AI 질의응답 | F-29 | 근거 번호가 붙은 답변 |
 | | 상황 정정 | F-30 | "괴산리 대피 완료, 헬기 2대 추가" → 확인 → 제안서 새 버전(예측은 그대로) |
 | | 이력·변경 비교 | F-14 | 제안서 버전 목록, 직전 버전과 비교 |
@@ -387,7 +387,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | `perimeter_version` | smallint | NN | 버전 앞 번호 = 기준 예측의 시작 형상 `version_no`(발화점이면 0) |
 | `seq` | smallint | NN | 버전 뒷 번호. 같은 `perimeter_version` 안에서 1, 2 … |
 | `trigger` | `proposal_trigger` ENUM | NN | 계기: `PREDICTION`(예측 갱신) · `CORRECTION`(상황 정정) |
-| `correction_id` | bigint | FK → `situation_corrections` | 정정 버전일 때만 값이 있음. FK는 「제안 다루기」 묶음에서 연결 |
+| `correction_id` | bigint | FK → `situation_corrections` | 정정 버전일 때만 값이 있음 |
 | `official_stage` | `response_stage` ENUM | NN | 생성 당시 공식 대응단계. `incidents.official_stage`는 나중에 바뀌므로 그때 값을 남긴다 |
 | `judged_stage` | `response_stage` ENUM | NN | **현재 기준** 판정 단계. 매뉴얼 p.73 판단기준을 현재 화선(기준 예측의 시작 형상) 면적·현재 풍속·현재 화선 안 시설에 적용 |
 | `predicted_stage` | `response_stage` ENUM | NN | **예측 기준** 판정 단계. 같은 기준을 P5 면적·0~5시간 평균풍속·P5 안 시설에 적용 |
@@ -453,7 +453,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 |---|---|---|---|
 | `id` | bigint | PK | |
 | `item_id` | bigint | FK → `proposal_items` | 제안 문장의 근거 |
-| `message_id` | bigint | FK → (질의응답 메시지) | AI 답변의 근거(F-29). FK는 「제안 다루기」 묶음에서 연결 |
+| `message_id` | bigint | FK → `qa_messages` | AI 답변의 근거(F-29) |
 | `k` | smallint | NN | 문장 속 번호 |
 | `chunk_id` | bigint | NN, FK → `evidence_chunks` | |
 
@@ -499,8 +499,8 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | 대상 지도 강조 | `detail.targets`의 마을·시설 id(마을·시설 테이블은 지도·자원 묶음) |
 | F-13 근거 조회 | `citations` → `evidence_chunks`(문서·쪽·항목·본문), 어느 문장의 근거인지는 `proposal_items.text` |
 | F-14 이력·변경 | 산불별 `proposals` 목록, 직전 버전과 항목 비교 |
-| F-29 AI 답변 근거 | `citations.message_id`(다음 묶음) |
-| F-30 정정 버전 | `trigger = CORRECTION`, `correction_id`(다음 묶음) |
+| F-29 AI 답변 근거 | `citations.message_id` → `qa_messages`(2.5) |
+| F-30 정정 버전 | `trigger = CORRECTION`, `correction_id` → `situation_corrections`(2.5) |
 | F-03 종료 | 종료 후 새 버전 차단, 조회만 |
 
 #### 제안서가 쌓이는 예
@@ -516,6 +516,105 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 
 - 현재 제안서는 v2.3, 현재 예측은 id 4
 - v1.2는 예측 id 2를 그대로 가리킨다. 정정은 예측을 다시 돌리지 않는다
+
+### 2.5 제안 다루기
+
+통합지휘권자가 AI 어시스턴트로 **묻거나(F-29 질의응답)** **상황 변화를 알리는(F-30 상황 정정)** 기능이다. 근거 조회(F-13)와 이력·변경 비교(F-14)는 2.4의 테이블로 처리한다.
+
+| 테이블 | 1행 = | 내용 |
+|---|---|---|
+| `situation_corrections` | 확인·저장한 정정 1건 | 입력 원문, 바뀐 항목들(이전·이후) |
+| `qa_messages` | 질문 1개와 답변 | 질문, 답변(근거 [k]), 지정한 항목 |
+
+#### 상황 정정 — 무슨 말이든 받되, 바꾸는 칸은 정해져 있다
+
+통합지휘권자는 자유롭게 입력한다. 하지만 제안서를 바꾸는 것은 규칙 엔진이 읽는 상황 값뿐이고, 그 값은 아래 **정정 가능 항목**으로 정해져 있다. AI는 자유로운 문장을 이 목록 안의 변경으로 바꾸는 역할만 한다. 목록에 없는 말은 저장하지 않는다.
+
+| 대상 | 정정 가능 항목 | 저장 위치 | 규칙 엔진에서 |
+|---|---|---|---|
+| 마을 | 대피 완료 · 부상·고립 인원 · 대피명령 | `incidents.situation.villages` | E2·E3·E7 |
+| 진화자원 투입 수 | 헬기 · 소방차 · 진화인력 | `incidents.situation.deployed` | S3 |
+| 전파 | 재난문자 송출 | `incidents.situation` | E6 |
+| 산불 | 공식 대응단계 · 위기경보 | `incidents.official_stage` · `alert_level` | S1·S6 |
+
+- 진화예상시간은 넣지 않는다(1.3의 5번)
+- 자주 나오는 말이 생기면 정정 가능 항목을 하나 추가해 넓힌다. 상황·변경이 jsonb라 테이블은 바뀌지 않는다
+- 확인되지 않은 자유 문장(「현장 메모」)을 LLM에 넘기지 않는다. 판정은 규칙 엔진이 하고 LLM은 그 값을 바꾸지 못한다는 원칙 때문이다
+
+| 입력 예 | AI 해석 | 결과 |
+|---|---|---|
+| 「괴산리 주민 다 빠져나갔어」 | 마을 1024 · 대피 완료 · false → true | 확인 카드 → 저장 |
+| 「헬기 두 대 더 왔어」 | 헬기 투입 수 · 6 → 8 | 확인 카드 → 저장 |
+| 「확산대응 1단계 발령됐어」 | 공식 대응단계 · 초기대응 → 1단계 | 확인 카드 → 저장 |
+| 「바람이 세졌어」 | 정정 항목 아님 | 저장 안 함. 「기상은 다시 예측하면 반영됩니다」 |
+| 「현장 분위기가 안 좋아」 | 정정 항목 아님 | 저장 안 함. 「정정할 수 있는 항목이 아닙니다」 |
+| 「괴산리 대피 몇 시까지 해야 해?」 | 질문 | 질의응답(`qa_messages`) |
+
+#### `situation_corrections` — 상황 정정
+
+**어떤 테이블**: 확인 카드에서 **「확인」을 누른 정정 1건 = 1행**. 한 번 입력으로 여러 항목이 바뀌어도(「괴산리 대피 완료, 헬기 2대 추가」) 1행이다. 정정 1건이 제안서 새 버전 1개가 되기 때문이다(`proposals.correction_id`).
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| `id` | bigint | PK | |
+| `incident_id` | bigint | NN, FK → `incidents` | |
+| `user_id` | bigint | NN, FK → `users` | 정정한 통합지휘권자 |
+| `input_text` | text | NN | 입력 원문. AI가 잘못 해석했는지 확인할 때 본다 |
+| `changes` | jsonb | NN | 바뀐 항목들(아래). 정정 가능 항목만 들어간다 |
+| `created_at` | timestamptz | NN, 기본 now() | 「확인」을 누른 시각 |
+
+`changes` 형태:
+
+```json
+[
+  { "target": "village", "target_id": 1024, "item": "evacuated", "before": false, "after": true },
+  { "target": "deployed", "item": "helicopter", "before": 6, "after": 8 }
+]
+```
+
+- 요구사항 분석서는 바뀐 항목마다 1행이었지만, 정정 1건 = 제안서 버전 1개라서 입력 1건 = 1행으로 묶었다
+- 취소, 대상을 찾지 못함, 가용 범위 초과(예: 보유보다 많은 헬기 투입)는 아무것도 저장하지 않는다(UC-QA-02 A1·E1·E3). 가용 범위 확인에는 진화자원 테이블(지도·자원 묶음)을 쓴다
+
+#### `qa_messages` — AI 질의응답
+
+**어떤 테이블**: **질문 1개와 그 답변 = 1행**(1.3의 2번: 질문·답변만 저장). 질의응답은 상황과 제안을 바꾸지 않는다.
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| `id` | bigint | PK | |
+| `incident_id` | bigint | NN, FK → `incidents` | |
+| `user_id` | bigint | NN, FK → `users` | 질문한 통합지휘권자 |
+| `proposal_id` | bigint | FK → `proposals` | 질문할 때 보고 있던 제안서. 예측 전이면 NULL |
+| `item_code` | varchar(10) | | 「이 항목 질문」으로 지정한 항목. 없으면 NULL |
+| `question` | text | NN | 질문 |
+| `answer` | text | NN | 답변. 근거 번호 [k] 포함 |
+| `created_at` | timestamptz | NN, 기본 now() | |
+
+- 답변 속 [k]는 `citations.message_id`로 근거 청크를 가리킨다
+- 질문마다 따로 답한다(앞 질문을 이어 받는 여러 턴 대화는 MVP에서 하지 않음)
+- 근거를 찾지 못하면 추측하지 않고 「근거를 찾지 못했습니다」로 답하고 `event_logs`에 남긴다(UC-QA-01 E1)
+- 정정으로 판별된 입력은 여기에 저장하지 않고 확인 카드로 넘긴다. 확인하면 `situation_corrections.input_text`에 남는다
+- 빠른 질문 6개는 화면의 고정 문구라 저장하지 않는다
+
+**데이터가 쌓이는 방식**
+
+- 정정 「확인」 → 한 트랜잭션으로 `situation_corrections` 1행 INSERT + `incidents`(`situation`·`official_stage`·`alert_level`) UPDATE + `event_logs`(`SITUATION_CORRECTED`)
+- 이어서 현재 예측 그대로 규칙 판정·제안 생성 → `proposals`(`CORRECTION`, `correction_id`) 새 버전
+  - **제안 생성이 실패해도 정정은 남는다**(UC-QA-02 E2). 마지막 정정 시각 > 현재 제안서 시각이면 화면에 「제안서가 최신 상황을 반영하지 못함 · 다시 생성」을 띄운다
+  - **예측 전**(제안서 없음)에 한 정정은 상황만 저장하고 제안서는 만들지 않는다. 다음 예측 때 반영된다
+- 질문 → 답변을 받으면 `qa_messages` 1행 + `citations`
+- 고치거나 지우지 않는다. 종료된 산불은 정정을 막고 질문만 받는다
+
+**기능에서 쓰이는 곳**
+
+| 기능 | 사용 |
+|---|---|
+| F-30 상황 정정 | `situation_corrections` INSERT, `incidents` UPDATE, 제안서 새 버전 |
+| F-14 「제안 변경사항」 창 | `proposals.correction_id` → `changes`(무엇을 정정했는지) |
+| F-29 AI 질의응답 | `qa_messages` INSERT, 답변 근거는 `citations` |
+| F-29 「이 항목 질문」 | `qa_messages.item_code` |
+| F-32 이벤트 로그 | `SITUATION_CORRECTED`, 근거 부족 |
+| F-03 종료 | 종료 후 정정 차단 |
 
 ## 3. ERD
 
