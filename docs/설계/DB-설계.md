@@ -14,7 +14,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | 1 | 기능 정리 — DB가 받쳐 줘야 할 기능 | **완료** |
 | 2 | 테이블 정의 — 묶음별로 테이블과 컬럼을 함께 정의 | **진행 중** (계정·산불 보고·예측·제안·제안 다루기·지도·자원 초안) |
 | 3 | ERD | 대기 |
-| 4 | 기능 → 테이블 검증 | 대기 |
+| 4 | 기능 → 테이블 검증 | **초안** (32개 중 ✅ 26 · ⚠️ 5 · ❌ 1, 남은 문제 5개) |
 
 ## 설계 원칙
 
@@ -840,4 +840,68 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 
 ## 4. 기능 → 테이블 검증
 
-(다음 단계)
+요구사항 분석서의 F-01~F-32가 2절 테이블로 수행되는지 하나씩 확인한다(2026-11-01). **✅ 됨** · **⚠️ 범위를 줄여 됨(결정·데이터 필요)** · **❌ 테이블 없음**
+
+### 4.1 기능별 검증
+
+| F-ID | 기능 | 쓰는 테이블 | 결과 | 메모 |
+|---|---|---|---|---|
+| F-01 | 로그인·계정·권한 | `users`, `event_logs` | ✅ | 발급·회수(`deleted_at`)·잠금(`failed_login_count`)·역할(`role`). 로그인·로그아웃은 `event_logs` |
+| F-02 | 산불 상황 보고 | `incidents`, `fire_perimeters`, `admin_areas` | ✅ | 발화 지점 → 읍면동 자동. 화선 v1… 정정은 새 번호. 「접수 기관」 목록은 제외(1.3의 3번) |
+| F-03 | 발화 종료 | `incidents` | ✅ | `status`·`ended_at`·`ended_by`. 이후 보고·예측·정정 차단 기준 |
+| F-04 | 산불 발생·접수 정보 | `incidents`, `fire_perimeters`, `predictions`, `admin_areas` | ✅ | 산불 이름 = 읍면동 + 시군구 이름 |
+| F-05 | 통합 상황도 | `incidents`, `fire_perimeters`, `prediction_slices`, `villages`, `facilities` | ✅ | P1~P8 시간 재생 = `base_at` + `hour` |
+| F-06 | 지도 레이어 선택 | `villages`(인구), `facilities`, `map_features`, `admin_areas` | ✅ | |
+| F-07 | 주요 시설 표시 | `villages`, `facilities`, `map_features`(담수지) | ✅ | |
+| F-08 | 가용 현황 | `resources`, `resource_bases`, `incidents.situation.deployed` | ⚠️ | 헬기·차량은 기지별 상태로 됨. **인력은 개별 자원이 없음**(1.4 진화대 제외) → 산불별 투입 수만 |
+| F-09 | 확산 예측 실행 | `predictions`, `prediction_slices`, `fire_perimeters` | ✅ | 한 트랜잭션으로 예측 → 제안서까지 |
+| F-10 | 산불 위험도 조회 | — | ❌ | **위험도 결과(R·등급·요인별 기여)를 담을 곳이 없음**. 4.2의 1번 |
+| F-11 | 대응 제안 생성·상세 | `proposals`, `proposal_items`, `citations`, `evidence_chunks` | ✅ | 판정 이유·대상은 `detail` |
+| F-12 | 제안 분류 | `proposal_items.axis`·`categories` | ✅ | |
+| F-13 | 근거 조회 | `citations`, `evidence_chunks` | ✅ | |
+| F-14 | 이력·변경 | `proposals`, `proposal_items`, `situation_corrections` | ✅ | 변경 태그는 직전 버전과 비교해 계산 |
+| F-15 | S1 대응단계·격상 | `proposals`(공식·현재 판정·예측 판정 단계), `incidents` | ✅ | 매뉴얼 p.73 3요소 |
+| F-16 | S2 우선지역·보호대상 | `villages`, `facilities`, `map_features`(송전) | ✅ | 고압선 피해 여부 p.114 |
+| F-17 | S3 자원 배분 | `resource_bases`, `resources`, `map_features`(담수지), `incidents.situation.deployed` | ✅ | 관할 기지 대기 대수 → 응원 |
+| F-18 | S4 진화 방식·시간대 | `predictions.weather`, `predictions.base_at`, `resources` | ✅ | 일몰 시각은 위경도·날짜로 계산(저장 안 함) |
+| F-19 | S5 시설 보호 | `facilities`(국가유산), `map_features`(송전) | ✅ | |
+| F-20 | S6 유관기관·지휘권 인계 | `facilities`(소방·경찰·응급), `resource_bases`, `admin_areas` | ⚠️ | 테이블은 됨. 지휘권 인계 판정에 **전국 시도·시군구 경계 적재** 필요 |
+| F-21 | S7 진화인력 안전 | `map_features`(임도 대용) | ⚠️ | **인력 위치는 추적하지 않음**(1.4) → 퇴로 참고·철수 권고만 |
+| F-22 | E1 위험구역 | `villages`, `prediction_slices` | ✅ | P5·P8과 겹친 비율 |
+| F-23 | E2 대피 대상·순서·시점 | `villages`(인구·65세 이상), `prediction_slices`, `incidents.situation` | ✅ | 위험도는 같은 트랜잭션에서 계산한 값을 씀(4.2의 1번과 연결) |
+| F-24 | E3 취약시설·미대피 | `facilities`(취약시설·응급 이송처), `incidents.situation.villages` | ✅ | |
+| F-25 | E4 대피소 배정 | `facilities`(대피소), `villages` | ✅ | 직선거리 |
+| F-26 | E5 대피 경로·교통통제 | `map_features`(도로), `facilities`(경찰) | ⚠️ | **진화차량 진입로·지정 대피로 데이터 없음** → 위험 구간 + 경찰 요청까지(2.6 `map_features`) |
+| F-27 | E6 재난문자·방송 | `villages`, `admin_areas`, `incidents.situation` | ✅ | 송출 여부는 `situation.disaster_sms_sent` |
+| F-28 | E7 인명구조 | `incidents.situation.villages`, `facilities`(소방·경찰) | ✅ | |
+| F-29 | AI 질의응답 | `qa_messages`, `citations` | ✅ | |
+| F-30 | AI 상황 정정 | `situation_corrections`, `incidents`, `proposals`, `resources` | ✅ | 가용 범위 확인 = `resources` 대기 대수 |
+| F-31 | 진화자원 관리 | `resources`, `resource_bases`, `event_logs` | ⚠️ | 헬기·차량·기지는 됨. **인력은 관리 대상 아님**(F-08과 같음) |
+| F-32 | 이벤트 로그 | `event_logs` | ✅ | 추가만. `action` 예: `LOGIN_FAILED`, `PREDICTION_FAILED`, `PROPOSAL_CREATED`, `ITEM_NO_EVIDENCE`, `RESOURCE_UPDATED` |
+
+**결과**: 32개 중 ✅ 26 · ⚠️ 5 · ❌ 1
+
+### 4.2 남은 문제
+
+| # | 문제 | 기능 | 선택지 | 상태 |
+|---|---|---|---|---|
+| 1 | **위험도 결과를 저장할 곳이 없다.** 2.3에 「위험도 묶음에서 다룸」이라고만 적혀 있고 정의가 없다. R(1.00~5.00), 등급, 23개 요인별 등급·기여도, 산불별 최대 위험도가 필요하다 | F-10 (E2·S1에서도 참조) | ① `predictions`에 `risk_score`·`risk_factors`(jsonb) 칸 추가 — 예측 1회 = 위험도 1개라 1:1이고 같은 트랜잭션에서 저장된다 ② `risk_assessments` 테이블 따로 | **결정 필요** |
+| 2 | 위험도의 「변하지 않는 값」(지형 7·연료 6)을 지역마다 미리 계산한 **등급 격자**를 어디 둘지 정하지 않았다([`위험도-정리.md`](위험도-정리.md)는 「격자 테이블」) | F-10 | 설계 원칙(래스터는 파일)대로 **등급 래스터 파일**로 두고 DB에는 경로만 / PostGIS raster 테이블 | **결정 필요** |
+| 3 | F-10 「산불별 최대 위험도는 **종료 후에도** 확인」과 1.4 「종료된 산불의 위험도는 표시하지 않음」(7주차-1차 회의)이 다르다 | F-10 | 1번이 정해지면 데이터로는 둘 다 됨(최대 = 그 산불 예측들의 최댓값). 화면에 보일지만 정하면 됨 | **결정 필요** |
+| 4 | 요구사항의 「인력」(F-08·F-31)과 S7 「인력 위치」는 1.4 결정(진화대 제외·위치 추적 안 함)으로 개별 데이터가 없다 | F-08, F-21, F-31 | 산불별 투입 수(`situation.deployed.crew`)로 대신. 요구사항 문구를 「헬기·차량(인력은 투입 수)」으로 맞춤 | 설계는 됨, 문서 맞춤 필요 |
+| 5 | E5 「진화차량 진입로와 대피 경로 충돌」은 데이터가 없다 | F-26 | 위험 구간과 경찰 요청까지만(2.6) | 설계는 됨(MVP 축소) |
+
+**데이터만 남은 것**(테이블 정의는 끝남): 전국 시도·시군구 경계(F-20 지휘권), 기지 관할 권역 → `admin_areas` id(F-17), 차량 시연값(F-08·F-17), 도로 노선 번호(F-26)
+
+### 4.3 외래키가 아닌 참조
+
+jsonb·배열로 가리키는 값은 DB가 맞는지 확인해 주지 않으므로, 저장하는 코드에서 확인한다.
+
+| 어디에 | 무엇을 가리키나 | 확인 시점 |
+|---|---|---|
+| `incidents.situation.villages`의 키 | `villages.id` | 상황 정정 저장 때 |
+| `situation_corrections.changes[].target_id` | `villages.id` | 상황 정정 저장 때 |
+| `proposal_items.detail.targets` | `villages.id`, `facilities.id` | 제안서 저장 때 |
+| `resource_bases.coverage_area_ids` | `admin_areas.id` | 기지 등록·수정 때 |
+
+- 바탕 데이터를 다시 넣을 때 `villages.id`·`facilities.id`를 유지해야 하는 이유도 이것이다(2.6 「데이터가 쌓이는 방식」)
