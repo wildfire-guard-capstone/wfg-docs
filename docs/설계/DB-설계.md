@@ -4,7 +4,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 
 | 항목 | 내용 |
 |---|---|
-| 최종 갱신 | 2026-11-01 |
+| 최종 갱신 | 2026-11-02 |
 | 기준 | 수정 요구사항 분석서(F-01~F-32), 수정 프로토타입 보고서(49쪽 MVP 7개), 회의 결정(10/10~10/16) |
 | 관련 문서 | [`데이터-자원.md`](데이터-자원.md) |
 | 이전 판 | 설계 원칙·데이터 추출·테이블 후보 32개·계정 묶음 컬럼을 정리했던 이전 판은 Git 이력(PR #21~#28)에 있음 |
@@ -67,6 +67,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | 3 | 기관별 접수 기록(접수 기관·시각·경로 목록) | **제외** (2026-10-23 팀장 결정) | F-02의 「접수 시각」은 `reported_at`으로 충족. 「접수 기관」은 판정·제안에 쓰이지 않는 표시용이라 MVP에서 뺌. 프로토타입 v4에는 줄 단위 입력·표시가 있었음 |
 | 4 | 정정의 진화자원 투입 수("헬기 2대 추가") | **포함** (2026-10-23 팀장 결정) | 정정 가능 항목에 투입 수가 있고, S3(자원 배분) 판정의 입력. 자원 개별 상태(F-08·F-31, 전산 관리자 관리)와 별개로 **산불별 투입 수**로 관리 |
 | 5 | 진화예상시간 | **제외** (2026-10-27 팀장 결정) | 매뉴얼 p.73 판단 기준표 4요소 중 하나지만, 시스템이 구할 수 없고 현장 사람이 판단해 알려 줘야 하는 값이다. 매뉴얼의 단계 정의는 피해면적·시설피해 중심이라 나머지 3요소(피해면적·평균풍속·시설피해)로 판정한다. 입력 칸·정정 항목·`incidents.situation`에 두지 않는다 |
+| 6 | 공식 대응단계(산림청장 발령) | **제외** (2026-11-02) | 산림청장이 실제로 발령한 단계는 시스템이 알 수 없다고 가정한다. 산불 보고·상황 정정에서 단계를 입력받지 않고, 현재 단계는 **화선을 보고·정정할 때마다** 규칙 엔진이 그 화선으로 매뉴얼 p.73 판단기준을 적용해 판정하고 `incidents.current_stage`에 넣는다. 제안서는 생성 때 그 값을 `proposals.judged_stage`로 복사하고, 5시간 뒤 단계는 P5 기준(`predicted_stage`) |
 
 ### 1.4 설계에 반영할 회의·데이터 결정
 
@@ -146,8 +147,8 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | `reporter_name` | varchar(50) | NN | 신고자 성명(규정 제6조제1항제1호). 모르면 「미상」 입력 |
 | `reporter_phone` | varchar(20) | NN | 신고자 연락처(규정 제6조제1항제1호). 모르면 「미상」 입력 |
 | `status` | `incident_status` ENUM | NN, 기본 `IN_PROGRESS` | `IN_PROGRESS`(진행 중)·`ENDED`(종료). 화선이 아직 없는지는 `fire_perimeters`에 `version_no ≥ 1`인 행이 있는지로 판단 |
-| `official_stage` | `response_stage` ENUM | NN, 기본 `INITIAL` | 공식 대응단계(산림청장 발령): `INITIAL`(초기대응)·`STAGE1`·`STAGE2`(확산대응 1·2단계). **산불 보고 때 상황 보고자가 입력**(늦게 발견돼 처음부터 1단계일 수 있음), 이후 바뀌면 통합지휘권자가 상황 정정으로 입력 |
-| `alert_level` | `alert_level` ENUM | NN, 기본 `ATTENTION` | 위기경보: `ATTENTION`(관심)·`CAUTION`(주의)·`ALERT`(경계)·`SERIOUS`(심각). 공식 단계와 같이 산불 보고 때 입력, 이후 상황 정정 |
+| `current_stage` | `response_stage` ENUM | NN, 기본 `INITIAL` | **현재 대응단계**: `INITIAL`(초기대응)·`STAGE1`·`STAGE2`(확산대응 1·2단계). 사람이 입력하지 않고, **화선을 보고·정정할 때마다** 규칙 엔진이 그 화선의 면적·그 시각 풍속·화선 안 주택 동수로 판정해 UPDATE(매뉴얼 p.73). 산불 보고 때는 v0(발화점, 면적 0)으로 판정. 산림청장 공식 발령은 두지 않음(1.3의 6번) |
+| `alert_level` | `alert_level` ENUM | NN, 기본 `ATTENTION` | 위기경보: `ATTENTION`(관심)·`CAUTION`(주의)·`ALERT`(경계)·`SERIOUS`(심각). 산불 보고 때 입력, 이후 상황 정정 |
 | `situation` | jsonb | NN, 기본 `{}` | **현재 상황**(아래). 상황 정정으로 바뀜 |
 | `reported_by` | bigint | NN, FK → `users` | 이 산불을 시스템에 **처음 등록한 상황 보고자 계정**. 119에 신고한 사람(`reporter_name`)과 다름 |
 | `created_at` | timestamptz | NN, 기본 now() | 등록 시각 |
@@ -159,15 +160,30 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 ```json
 {
   "villages": { "1024": { "evacuated": true, "evac_order": true, "injured_or_isolated": 0 } },
-  "deployed": { "helicopter": 6, "fire_truck": 12, "crew": 80 },
+  "deployed": {
+    "helicopter": { "total": 28, "forest": 9, "local": 17, "fire": 2, "military": 0 },
+    "vehicle":    { "total": 36, "forest_vehicle": 13, "fire_truck": 21, "other": 2 },
+    "crew":       { "total": 357, "special_crew": 187, "forest_officials": 113, "fire": 57, "military": 0, "police": 0, "other": 0 }
+  },
   "disaster_sms_sent": true
 }
 ```
 
+`deployed` — 이 산불에 **투입된** 진화자원 수. 산림청 「산불 상황 보고」 양식(의성산불백서 부록 3)의 「현재 진화자원」 칸을 그대로 따른다
+
+| 키 | 보고 양식 | 구분 |
+|---|---|---|
+| `helicopter` | 산불진화 헬기 | `forest`(산림청) · `local`(지자체) · `fire`(소방) · `military`(군) |
+| `vehicle` | 장비 | `forest_vehicle`(산불진화·지휘차) · `fire_truck`(소방차) · `other`(기타) |
+| `crew` | 인력 | `special_crew`(산불특수진화대 등) · `forest_officials`(산림공무원) · `fire`(소방) · `military`(군) · `police`(경찰) · `other`(기타) |
+
+- `total`은 꼭 있고, 구분 값은 아는 것만 넣는다. 「헬기 2대 추가」처럼 구분을 모르는 정정은 `total`만 바꾼다
+- 보유·대기는 여기가 아니라 `resources`에 있다(2.6). 인력은 보유를 관리하지 않으므로 투입 수만 있다
+
 **데이터가 쌓이는 방식**
 
-- 새 산불 보고 → 1행 INSERT(`IN_PROGRESS`, 보고자가 고른 공식 단계·위기경보). 같은 트랜잭션에서 발화점을 `fire_perimeters` v0으로 INSERT
-- 상황 정정을 확인하면 → `official_stage`·`alert_level`·`situation` UPDATE(정정 이력은 `situation_corrections`에 쌓임)
+- 새 산불 보고 → 1행 INSERT(`IN_PROGRESS`, 보고자가 고른 위기경보). 같은 트랜잭션에서 발화점을 `fire_perimeters` v0으로 INSERT
+- 상황 정정을 확인하면 → `alert_level`·`situation` UPDATE(정정 이력은 `situation_corrections`에 쌓임)
 - 종료 → `status = ENDED`, `ended_at`·`ended_by`
 - 삭제하지 않는다. 산불 하나당 행은 계속 1개
 
@@ -176,11 +192,11 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | 기능 | 사용 |
 |---|---|
 | F-02 산불 보고 | INSERT |
-| F-04 산불현황 | 주소·발생·신고·신고자·진행상태·공식 단계 읽기 |
+| F-04 산불현황 | 주소·발생·신고·신고자·진행상태·현재 대응단계(`current_stage`) 읽기 |
 | F-05 지도 | 발화 지점 표시 |
 | F-09 예측 | 직접 쓰지 않음. 발화점은 `fire_perimeters` v0으로 시작 |
-| F-11·F-15 제안 | 공식 단계를 제안서에 복사해 판정 단계와 비교(격상 권고), `situation`을 규칙 판정 입력으로 |
-| F-30 정정 | `official_stage`·`alert_level`·`situation` UPDATE |
+| F-11·F-15 제안 | `situation`을 규칙 판정 입력으로. 대응단계는 저장하지 않고 규칙 엔진이 판정(1.3의 6번) |
+| F-30 정정 | `alert_level`·`situation` UPDATE |
 | F-03 종료 | `status`. 이후 보고·예측·정정 차단의 기준 |
 
 #### `fire_perimeters` — 실측 화선
@@ -206,14 +222,14 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 **데이터가 쌓이는 방식**
 
 - 산불 보고 → v0(발화점) 1행 INSERT
-- 새 화선 보고 → 다음 번호로 1행 INSERT. 1시간마다 보고하므로 8시간이면 산불 하나에 v0 포함 약 9행
+- 새 화선 보고 → 다음 번호로 1행 INSERT. 1시간마다 보고하므로 8시간이면 산불 하나에 v0 포함 약 9행. 같은 트랜잭션에서 규칙 엔진이 새 화선으로 단계를 판정해 `incidents.current_stage` UPDATE
 - 정정 → 기존 행에 `corrected_at` 기록 + 고친 화선을 **다음 번호로** INSERT. 원래 행은 남김(아래 「화선 정정」)
 
 **기능에서 쓰이는 곳**
 
 | 기능 | 사용 |
 |---|---|
-| F-02 화선 보고·정정(UC-REPORT-01 대안 흐름 A2) | INSERT, 정정 시 `corrected_at` |
+| F-02 화선 보고·정정(UC-REPORT-01 대안 흐름 A2) | INSERT, 정정 시 `corrected_at`. 보고·정정마다 `incidents.current_stage` 다시 판정 |
 | F-05 지도 | 최신 유효 화선·이전 버전 표시(v0은 발화점 표시) |
 | F-04 산불현황 | 최신 화선 버전·면적(v0만 있으면 「화선 없음」) |
 | F-09 예측 | 현재 화선(없으면 v0 발화점)을 시작점으로 |
@@ -236,7 +252,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 |---|---|---|
 | 1 | 산불이 종료되지 않았는지 확인, 정정 대상은 **현재 화선(v2)** 하나뿐 | `incidents`, `fire_perimeters` |
 | 2 | v2에 `corrected_at = 13:05` | `fire_perimeters` UPDATE |
-| 3 | 고친 화선을 **v3**로 추가 | `fire_perimeters` INSERT |
+| 3 | 고친 화선을 **v3**로 추가하고, v3로 현재 대응단계를 다시 판정 | `fire_perimeters` INSERT, `incidents.current_stage` UPDATE |
 | 4 | 「화선 정정 v2 → v3」 기록 | `event_logs` (`PERIMETER_CORRECTED`) |
 | 5 | v2로 이미 예측했다면 통합지휘권자 화면에 **「재예측 필요」** 표시. 예측은 자동으로 돌지 않음 | 조회만 |
 
@@ -390,17 +406,15 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | `seq` | smallint | NN | 버전 뒷 번호. 같은 `perimeter_version` 안에서 1, 2 … |
 | `trigger` | `proposal_trigger` ENUM | NN | 계기: `PREDICTION`(예측 갱신) · `CORRECTION`(상황 정정) |
 | `correction_id` | bigint | FK → `situation_corrections` | 정정 버전일 때만 값이 있음 |
-| `official_stage` | `response_stage` ENUM | NN | 생성 당시 공식 대응단계. `incidents.official_stage`는 나중에 바뀌므로 그때 값을 남긴다 |
-| `judged_stage` | `response_stage` ENUM | NN | **현재 기준** 판정 단계. 매뉴얼 p.73 판단기준을 현재 화선(기준 예측의 시작 형상) 면적·현재 풍속·현재 화선 안 시설에 적용 |
+| `judged_stage` | `response_stage` ENUM | NN | **현재 기준** 대응단계. 생성 당시 `incidents.current_stage`를 복사한다(화선이 바뀌면 그 값이 바뀌므로 그때 값을 남긴다) |
 | `predicted_stage` | `response_stage` ENUM | NN | **예측 기준** 판정 단계. 같은 기준을 P5 면적·0~5시간 평균풍속·P5 안 시설에 적용 |
 | `created_at` | timestamptz | NN, 기본 now() | 생성 시각 |
 
 - 유일: `(incident_id, perimeter_version, seq)`
 - 현재 제안서 = 그 산불에서 `id`가 가장 큰 행
 - `perimeter_version`은 `prediction_id → perimeter_id → version_no`로도 구할 수 있지만, 같은 버전 번호가 두 번 생기지 않도록 유일 조건에 쓰려고 저장한다
-- 격상 관련 표시는 저장하지 않고 세 단계를 비교해 정한다
-  - `judged_stage` > `official_stage` → **격상 검토 권고**(매뉴얼 기준으로 이미 상위 단계에 해당)
-  - `judged_stage` = `official_stage`이고 `predicted_stage` > `official_stage` → **격상 대비 안내**(5시간 안에 상위 단계 기준에 닿을 것으로 예측)
+- 공식 대응단계(산림청장 발령)는 두지 않는다(1.3의 6번)
+- 격상 관련 표시는 저장하지 않고 두 단계를 비교해 정한다: `predicted_stage` > `judged_stage` → **격상 대비 안내**(5시간 안에 상위 단계 기준에 닿을 것으로 예측)
 - 판정 요소는 매뉴얼 p.73 판단 기준표 중 3개다(진화예상시간은 MVP 제외, 1.3의 5번). 요소를 합치는 방법은 매뉴얼에 없어 「하나라도 상위 기준이면 상위 단계」로 정한다
 
 | 요소 | 초기대응 | 확산대응 1단계 | 확산대응 2단계 |
@@ -409,7 +423,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | 평균풍속 | 3 m/s 미만 | 3~11 m/s 미만 | 11 m/s 이상 |
 | 시설피해 | 우려 없음 | 주택 등 주요시설 20동 미만 피해 우려 | 20동 이상 피해 우려 |
 
-- `judged_stage`와 `predicted_stage`는 같은 예측 행에서 나온다. 예측의 시작 형상이 그 시점의 현재 화선이고, P5가 그 예측의 결과이기 때문이다
+- `judged_stage`는 화선을 보고할 때 판정한 값(그 시각 풍속), `predicted_stage`는 예측의 P5와 0~5시간 평균풍속으로 판정한 값이다
 - 누가 만들었는지는 예측 버전이면 `predictions.requested_by`, 정정 버전이면 정정 기록의 사용자로 알 수 있다
 
 #### `proposal_items` — 제안 항목
@@ -494,8 +508,8 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | 기능 | 사용 |
 |---|---|
 | F-11 제안서 생성·상세 | 4개 테이블 INSERT, 펼침 상세에 `detail`(판정 이유·대상)·근거 목록 |
-| 제안서 머리 | 버전(`perimeter_version`.`seq`) · `created_at` · `trigger` · 기준 화선(`prediction_id → perimeter_id`) · `official_stage`·`judged_stage`·`predicted_stage` |
-| F-15 격상 검토 권고 | `judged_stage` > `official_stage`이면 격상 검토 권고, 그렇지 않고 `predicted_stage`가 더 높으면 격상 대비 안내 |
+| 제안서 머리 | 버전(`perimeter_version`.`seq`) · `created_at` · `trigger` · 기준 화선(`prediction_id → perimeter_id`) · `judged_stage`·`predicted_stage` |
+| F-15 대응단계·격상 | 현재 단계 `judged_stage`, `predicted_stage`가 더 높으면 격상 대비 안내 |
 | F-12 분류 | `axis`(진화·대피 탭), `categories`(구분 필터·건수) |
 | F-16~F-28 항목별 제안 | `proposal_items` 항목별 행 |
 | 대상 지도 강조 | `detail.targets`의 마을·시설 id → `villages`·`facilities`(2.6) |
@@ -535,9 +549,9 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | 대상 | 정정 가능 항목 | 저장 위치 | 규칙 엔진에서 |
 |---|---|---|---|
 | 마을 | 대피 완료 · 부상·고립 인원 · 대피명령 | `incidents.situation.villages` | E2·E3·E7 |
-| 진화자원 투입 수 | 헬기 · 소방차 · 진화인력 | `incidents.situation.deployed` | S3 |
+| 진화자원 투입 수 | 헬기 · 장비 · 인력(합계와 기관·종류별, 산림청 상황 보고 양식) | `incidents.situation.deployed` | S3 · S6 · S7 |
 | 전파 | 재난문자 송출 | `incidents.situation` | E6 |
-| 산불 | 공식 대응단계 · 위기경보 | `incidents.official_stage` · `alert_level` | S1·S6 |
+| 산불 | 위기경보 | `incidents.alert_level` | S1·S6 |
 
 - 진화예상시간은 넣지 않는다(1.3의 5번)
 - 자주 나오는 말이 생기면 정정 가능 항목을 하나 추가해 넓힌다. 상황·변경이 jsonb라 테이블은 바뀌지 않는다
@@ -546,8 +560,8 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | 입력 예 | AI 해석 | 결과 |
 |---|---|---|
 | 「괴산리 주민 다 빠져나갔어」 | 마을 1024 · 대피 완료 · false → true | 확인 카드 → 저장 |
-| 「헬기 두 대 더 왔어」 | 헬기 투입 수 · 6 → 8 | 확인 카드 → 저장 |
-| 「확산대응 1단계 발령됐어」 | 공식 대응단계 · 초기대응 → 1단계 | 확인 카드 → 저장 |
+| 「헬기 두 대 더 왔어」 | 헬기 투입 수(합계) · 28 → 30 | 확인 카드 → 저장 |
+| 「확산대응 1단계 발령됐어」 | 정정 항목 아님(대응단계는 시스템이 판정) | 저장 안 함. 「대응단계는 화선·기상으로 판정합니다」 |
 | 「바람이 세졌어」 | 정정 항목 아님 | 저장 안 함. 「기상은 다시 예측하면 반영됩니다」 |
 | 「현장 분위기가 안 좋아」 | 정정 항목 아님 | 저장 안 함. 「정정할 수 있는 항목이 아닙니다」 |
 | 「괴산리 대피 몇 시까지 해야 해?」 | 질문 | 질의응답(`qa_messages`) |
@@ -570,7 +584,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 ```json
 [
   { "target": "village", "target_id": 1024, "item": "evacuated", "before": false, "after": true },
-  { "target": "deployed", "item": "helicopter", "before": 6, "after": 8 }
+  { "target": "deployed", "item": "helicopter.total", "before": 28, "after": 30 }
 ]
 ```
 
@@ -600,7 +614,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 
 **데이터가 쌓이는 방식**
 
-- 정정 「확인」 → 한 트랜잭션으로 `situation_corrections` 1행 INSERT + `incidents`(`situation`·`official_stage`·`alert_level`) UPDATE + `event_logs`(`SITUATION_CORRECTED`)
+- 정정 「확인」 → 한 트랜잭션으로 `situation_corrections` 1행 INSERT + `incidents`(`situation`·`alert_level`) UPDATE + `event_logs`(`SITUATION_CORRECTED`)
 - 이어서 현재 예측 그대로 규칙 판정·제안 생성 → `proposals`(`CORRECTION`, `correction_id`) 새 버전
   - **제안 생성이 실패해도 정정은 남는다**(UC-QA-02 E2). 마지막 정정 시각 > 현재 제안서 시각이면 화면에 「제안서가 최신 상황을 반영하지 못함 · 다시 생성」을 띄운다
   - **예측 전**(제안서 없음)에 한 정정은 상황만 저장하고 제안서는 만들지 않는다. 다음 예측 때 반영된다
@@ -628,8 +642,8 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | `villages` | 마을(법정리) 1개 | 182 | `villages.geojson` |
 | `facilities` | 시설 1개(한 건물·한 구역 = 1행) | 220 | `facilities.csv` |
 | `map_features` | 도로·송전·담수지 선·면·점 1개 | 약 5,560 | `의성/` 레이어에서 만듦 |
-| `resource_bases` | 진화자원 기지 1곳 | 9 (시연) — 산림청 관리소 13곳 목록 있음 | `resources_헬기_시연.csv`에서 만듦 |
-| `resources` | 진화자원(헬기·차량) 1대 | 20 (헬기) + 차량 | `resources_헬기_시연.csv` |
+| `resource_bases` | 진화자원 기지 1곳 | 51 (시연): 산림항공관리소 3 · 지자체 임차 5 · 경북 119 항공대 1 · 의성 소방 9 · 인근 시군 소방 32 · 의성군 진화대 1 | `resource_bases.csv` |
+| `resources` | 진화자원(헬기·차량) 1대 | 162 (시연): 헬기 20 + 차량 142 | `resources.csv` |
 
 #### `admin_areas` — 행정구역
 
@@ -664,6 +678,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | `population_month` | date | NN | 인구 기준 달. 시연은 산불 직전인 2025-02-01 |
 | `pop65_est` | int | | 65세 이상 **추정** 인구 |
 | `pop0_14_est` | int | | 0~14세 **추정** 인구 |
+| `houses_est` | int | | 주택 **추정** 동수. 대응단계 판단기준 ④ 시설피해(「주택 등 주요시설 20동」, 표준매뉴얼 p.73)에 씀. 값을 어디서 채울지는 정할 것(후보: 행안부 리별 세대수, 시연용 가정값) |
 
 - `pop65_est`·`pop0_14_est` = 리 인구 × 겹친 SGIS 집계구의 연령 비율(겹친 면적으로 가중). 집계구가 리보다 커서 같은 읍면 안 리들은 비율이 비슷하다(데이터 자원 [M-3]). 이름에 `_est`를 붙여 실제 값이 아님을 드러낸다
 - 장애인 등 다른 취약계층은 넣지 않는다(10/30 결정, 1.4). 시설 입소자는 `facilities`의 취약시설로 다룬다
@@ -762,7 +777,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 |---|---|---|---|
 | `id` | bigint | PK | |
 | `name` | varchar(100) | NN, UK | 예: 안동산림항공관리소, 의성군 임차 계류장, 경북 119 항공대 |
-| `org_type` | varchar(20) | NN | 어느 기관 자원인가: `forest`(산림청) · `fire`(소방) · `local_lease`(지자체 임차) 등. 지원 요청 대상 기관을 정한다 |
+| `org_type` | varchar(20) | NN | 어느 기관 자원인가: `forest`(산림청) · `fire`(소방) · `local_lease`(지자체 임차헬기) · `local`(지자체 산불전문예방진화대 등) 등. 지원 요청 대상 기관을 정한다 |
 | `geom` | geometry(Point, 5179) | | 기지 위치. 발화 지점에서 가까운 기지 순으로 쓴다. **모르면 NULL**(지자체 임차 계류장은 아직 모름) |
 | `coverage_area_ids` | bigint[] | NN, 기본 `{}` | 관할 지역(`admin_areas` id 목록, 시군구 또는 시도). 예: 안동관리소 = 대구 + 경북 안동·영주·…·군위·의성·청송, 의성군 임차 = 의성군 |
 
@@ -786,9 +801,33 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 
 - 소속 기관·관할은 기지에 있으므로 자원마다 반복하지 않는다
 - **특징은 `attrs`(jsonb)에 둔다**: 헬기 `model`(기종)·`capacity_l`(담수량 L), 차량 `vehicle_type`(진화차·펌프차·물탱크차 등)·`capacity_l`. 종류마다 특징이 다르고 판정에 꼭 쓰는 값이 아니라서 칸으로 두지 않는다(`facilities`·`map_features`와 같은 방식). 관리 화면 표시에 쓰고, 나중에 「대형 헬기 우선 투입」처럼 판정에 쓰게 되면 그때 키를 정해 읽는다
-- 시연 헬기 20대(9개 기지): 안동관리소 5 · 울진관리소 3 · 양산관리소 5(산림청 공식 보유현황) + 지자체 임차 6(의성 2, 안동·예천·청송·영천 각 1) + 경북 119 항공대 1(시연용 가정값). 가정값 여부는 DB에 두지 않고 적재 파일·데이터 자원 문서에 남긴다. 차량은 시연값을 만들어 같은 테이블에 넣는다
+- `attrs.vehicle_type` 값: 소방 `펌프차` · `물탱크차` · `산불전문진화차(대형)` · `산불전문진화차(소형)`, 산림청·지자체 `산불진화차` · `산불지휘차` · `고성능진화차`(국회입법조사처 산불대응연구TF 특별보고서 표 4의 차종)
+- 가정값 여부는 DB에 두지 않고 적재 파일(`assumed`·`basis` 칸)과 데이터 폴더 README에 남긴다
 - **산불별 투입 수**(「헬기 2대 추가」)는 이 테이블이 아니라 `incidents.situation.deployed`에 있다(1.3의 4번). 이 테이블은 전체 보유·상태이고, 정정할 때 「보유보다 많이 투입」을 막는 가용 범위 확인에 쓴다(2.5)
 - 다른 테이블이 자원 id를 가리키지 않으므로(투입 수는 숫자) 삭제는 행을 지운다. 등록·수정·삭제는 `event_logs`에 `RESOURCE_UPDATED`(자원 id, 변경 전후 값)로 남는다
+
+**적재 데이터 (시연값, 11/2)** — `data/지도자원/적재/`, `스크립트/build_resources.py`가 만든다
+
+| 파일 | 내용 | 근거 |
+|---|---|---|
+| `resource_bases.csv` | 기지 51곳. 칸: `name` · `org_type` · `lon`·`lat`(모르면 빈칸) · `coverage`(관할 시도·시군구 이름, 「;」 구분 → 적재할 때 `admin_areas` id로 바꿔 `coverage_area_ids`에 넣음) | 산림항공관리소 3곳 = 산림청 누리집 관리소안내(좌표·관할). 의성 소방 9곳·인근 시군 소방 32곳 = `facilities` 좌표. 지자체 임차·경북 119 항공대·의성군 진화대는 위치 모름 |
+| `resources.csv` | 162대. 칸: `kind` · `name` · `base`(기지 이름 → 적재할 때 `base_id`) · `status`(모두 `AVAILABLE`) · `attrs` | 아래 |
+
+| 자원 | 기지 | 대수 | 근거 |
+|---|---|---|---|
+| 헬기 | 안동·울진·양산 산림항공관리소 | 13 | 산림청 항공기 보유현황(2025-06-23) |
+| 헬기 | 지자체 임차 5곳(의성 2, 안동·예천·청송·영천 각 1) | 6 | **가정값**: 경북도 발표·방침을 바탕으로 배분 |
+| 헬기 | 경북 119 항공대 | 1 | **가정값**: 기종·기지는 보도 |
+| 차량 | 의성소방서 | 펌프차 2 · 물탱크차 1 · 산불전문진화차(소형) 1 | **가정값**: 차종은 TF 특별보고서 표 4, 대수는 전국 비율(펌프차 2,981 · 물탱크차 878 · 산불전문진화차 233 ÷ 소방서·센터 1,216곳)을 의성 소방서·센터 4곳에 적용 |
+| 차량 | 119안전센터 3곳 | 펌프차 각 1, 물탱크차 2 | 위와 같음 |
+| 차량 | 119지역대 5곳 | 펌프차 각 1 | **가정값**: 지역대 배분 |
+| 차량 | 인근 시군 소방 32곳(안동·구미·상주·영천·예천·청송·군위, **응원**) | 펌프차 77 · 물탱크차 22 · 산불전문진화차(소형) 6 | **가정값**: 같은 전국 비율. 3/22 13:45 실제 소방차 투입 21대가 의성 관할 14대를 넘어 응원분이 필요 |
+| 차량 | 의성군 산불전문예방진화대 | 산불진화차 23 | 경북매일 2026-10-28 「의성군, 가을철 산불방지 총력」(산불진화차량 23대) |
+
+- 의성 소방 대수는 2016년 의성소방서 현황(펌프차 16 · 물탱크차 3, 당시 군위 포함)과 비슷한 수준
+- 담수량(`capacity_l`)은 헬기만 넣었다. 차량은 근거가 없어 비웠다
+- 인력은 넣지 않는다(개별·보유로 관리하지 않음). 산불별 투입 수로만 다룬다(`incidents.situation.deployed`)
+- `coverage_area_ids`를 채우려면 `admin_areas`에 전국 시도·시군구가 있어야 한다(아직 의성만 적재됨)
 
 | 화면·판정 | 계산 | 예 |
 |---|---|---|
@@ -814,6 +853,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | F-02 산불 보고 | 발화 지점 → `incidents.admin_area_id`(읍면동) |
 | E1 위험구역 | P5·P8과 `villages.geom`이 겹치는지 + 겹친 비율 |
 | E2 대피 순서 | `villages.population`·`pop65_est` |
+| S1 대응단계 ④ 시설피해 | 화선·P5와 겹친 마을의 `houses_est`(겹친 비율만큼) |
 | E3 취약시설 | P5·P8 안 `VULNERABLE`, 가까운 응급 이송처(`attrs.emergency`) |
 | E4 대피소 | `SHELTER`의 `capacity`, 마을에서 직선거리 |
 | E5 교통통제 | P5·P8과 겹치는 `road`의 위험 구간(양 끝 마을), 가까운 `POLICE` |
@@ -860,7 +900,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | F-12 | 제안 분류 | `proposal_items.axis`·`categories` | ✅ | |
 | F-13 | 근거 조회 | `citations`, `evidence_chunks` | ✅ | |
 | F-14 | 이력·변경 | `proposals`, `proposal_items`, `situation_corrections` | ✅ | 변경 태그는 직전 버전과 비교해 계산 |
-| F-15 | S1 대응단계·격상 | `proposals`(공식·현재 판정·예측 판정 단계), `incidents` | ✅ | 매뉴얼 p.73 3요소 |
+| F-15 | S1 대응단계·격상 | `proposals`(현재 판정·예측 판정 단계), `incidents` | ✅ | 매뉴얼 p.73 3요소 |
 | F-16 | S2 우선지역·보호대상 | `villages`, `facilities`, `map_features`(송전) | ✅ | 고압선 피해 여부 p.114 |
 | F-17 | S3 자원 배분 | `resource_bases`, `resources`, `map_features`(담수지), `incidents.situation.deployed` | ✅ | 관할 기지 대기 대수 → 응원 |
 | F-18 | S4 진화 방식·시간대 | `predictions.weather`, `predictions.base_at`, `resources` | ✅ | 일몰 시각은 위경도·날짜로 계산(저장 안 함) |
