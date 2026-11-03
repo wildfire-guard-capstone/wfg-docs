@@ -159,7 +159,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 
 ```json
 {
-  "villages": { "1024": { "evacuated": true, "evac_order": true, "injured_or_isolated": 0 } },
+  "villages": { "1024": { "evacuated": true, "evac_order": true } },
   "deployed": {
     "helicopter": { "total": 28, "forest": 9, "local": 17, "fire": 2, "military": 0 },
     "vehicle":    { "total": 36, "forest_vehicle": 13, "fire_truck": 21, "other": 2 },
@@ -548,7 +548,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 
 | 대상 | 정정 가능 항목 | 저장 위치 | 규칙 엔진에서 |
 |---|---|---|---|
-| 마을 | 대피 완료 · 부상·고립 인원 · 대피명령 | `incidents.situation.villages` | E2·E3·E7 |
+| 마을 | 대피 완료 · 대피명령 | `incidents.situation.villages` | E2·E3 |
 | 진화자원 투입 수 | 헬기 · 장비 · 인력(합계와 기관·종류별, 산림청 상황 보고 양식) | `incidents.situation.deployed` | S3 · S6 · S7 |
 | 전파 | 재난문자 송출 | `incidents.situation` | E6 |
 | 산불 | 위기경보 | `incidents.alert_level` | S1·S6 |
@@ -656,10 +656,12 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | `code` | char(10) | NN, UK | **법정동코드 10자리**. 예: 의성군 `4773000000`, 의성읍 `4773025000` |
 | `name` | varchar(50) | NN | 예: 의성군, 안평면 |
 | `parent_id` | bigint | FK → `admin_areas` | 상위 행정구역(읍면동 → 시군구 → 시도). 시도는 NULL |
+| `neighbor_ids` | bigint[] | NN, 기본 `{}` | **인접 시군구** id 목록(경계가 맞닿은 시군구). 시군구 행에만 채우고 시도·읍면동은 `{}`. 적재할 때 경계로 한 번 계산(`ST_Touches`/`ST_Intersects`). 예: 의성군 = 안동시·청송군·군위군(대구)·구미시·상주시·예천군 |
 | `geom` | geometry(MultiPolygon, 5179) | NN | 경계(SGIS 2025-2Q) |
 
 - 코드는 SGIS 코드가 아니라 **법정동코드**로 통일한다. 마을(법정리)·리별 인구가 법정동코드로 연결되기 때문이다(1.4)
 - **넣는 범위**: 시도·시군구는 **전국**(시도 17 · 시군구 약 250), 읍면동은 **관할 시군구만**(의성 18). P5·P8이 관할 밖 시군구(안동·군위 등)나 다른 시도에 걸치는지 알아야 하기 때문이다(LLM 입력 L-17, S6 지휘권 인계)
+- `admin_areas.neighbor_ids`(인접 시군구: S6 동원 범위·L-17)·`villages.neighbor_ids`(옆 리: E4 대피소 범위)·`facilities.sigungu_id`는 경계가 바뀌지 않는 한 고정인 바탕 값이라 적재 때 미리 넣는다(규칙 엔진이 매번 경계를 계산하지 않게). 군위군은 2023년 대구광역시로 편입되어 의성 산불이 군위로 번지면 시도가 2개(경북·대구)에 걸친다
 - 산불 등록 때 `incidents.admin_area_id` = 발화 지점을 포함하는 `EMD` 행(`ST_Contains`)
 
 #### `villages` — 마을(법정리)
@@ -678,7 +680,8 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | `population_month` | date | NN | 인구 기준 달. 시연은 산불 직전인 2025-02-01 |
 | `pop65_est` | int | | 65세 이상 **추정** 인구 |
 | `pop0_14_est` | int | | 0~14세 **추정** 인구 |
-| `houses_est` | int | | 주택 **추정** 동수. 대응단계 판단기준 ④ 시설피해(「주택 등 주요시설 20동」, 표준매뉴얼 p.73)에 씀. 값을 어디서 채울지는 정할 것(후보: 행안부 리별 세대수, 시연용 가정값) |
+| `houses_est` | int | | 리 안 주택 동수(국토부 GIS건물통합정보 주용도 단독주택·공동주택 건물 수, 의성 합계 23,160동). 화면 표시용이고, 범위 안 동수는 `map_features`(`house`) 점으로 센다 |
+| `neighbor_ids` | bigint[] | NN, 기본 `{}` | **옆 마을** id 목록(경계가 맞닿은 리). 적재할 때 경계로 한 번 계산. 대피소 후보 범위(내 마을 + 옆 마을)에 쓴다. 의성 182리 평균 5.5곳 |
 
 - `pop65_est`·`pop0_14_est` = 리 인구 × 겹친 SGIS 집계구의 연령 비율(겹친 면적으로 가중). 집계구가 리보다 커서 같은 읍면 안 리들은 비율이 비슷하다(데이터 자원 [M-3]). 이름에 `_est`를 붙여 실제 값이 아님을 드러낸다
 - 장애인 등 다른 취약계층은 넣지 않는다(10/30 결정, 1.4). 시설 입소자는 `facilities`의 취약시설로 다룬다
@@ -700,6 +703,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | `address` | varchar(200) | | 주소 |
 | `phone` | varchar(20) | | 대표 전화 |
 | `village_id` | bigint | FK → `villages` | 시설이 있는 마을. **관할 밖 시설(인접 소방서·안동 병원)은 NULL** |
+| `sigungu_id` | bigint | NN, FK → `admin_areas` | 시설이 있는 **시군구**. 적재할 때 위치로 한 번 계산(`ST_Contains`). 리가 없는 관할 밖 시설도 시군구는 있어서, 시군구 단위로 거를 때 쓴다 |
 | `geom` | geometry(Geometry, 5179) | NN | 위치·모양. 건물 하나(소방서·경찰·대피소 등)는 점, 넓은 시설(국가유산 지정구역·사찰 경내 등)은 면도 넣을 수 있다. 지금 220곳은 모두 점 |
 | `attrs` | jsonb | NN, 기본 `{}` | 종류별 값(아래) |
 
@@ -738,6 +742,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | `power_tower` | 송전 철탑 | 159 | — | S5 |
 | `substation` | 변전소·발전소 | 14 | `type`(substation·plant) · `source`(발전소 종류. 의성 12곳 모두 `solar`) | S5 |
 | `water` | 담수지(1 ha 이상 저수지·호수 + 하천 구간) | 147 | `type`(reservoir·lake·river) · `area_ha` | S3 헬기 취수 후보 |
+| `house` | 주택 건물 1동의 중심점(국토부 GIS건물통합정보, 주용도 단독주택·공동주택) | 23,160 | `use`(단독주택·공동주택) · `code`(리 법정동코드) | S1 시설피해 20동 |
 
 - 종류가 계속 늘 수 있어 `kind`는 ENUM이 아닌 문자열로 둔다
 - 지정 대피로·진화차량 진입로는 공개 데이터가 없어 넣지 않는다(MVP 제외)
@@ -853,9 +858,9 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | F-02 산불 보고 | 발화 지점 → `incidents.admin_area_id`(읍면동) |
 | E1 위험구역 | P5·P8과 `villages.geom`이 겹치는지 + 겹친 비율 |
 | E2 대피 순서 | `villages.population`·`pop65_est` |
-| S1 대응단계 ④ 시설피해 | 화선·P5와 겹친 마을의 `houses_est`(겹친 비율만큼) |
+| S1 대응단계 ④ 시설피해 | 화선·P5 안에 든 `map_features`(`house`) 점 수 + 화선 안 국가유산(「주택·국가유산 등 주요시설 20동」, p.73·p.80) |
 | E3 취약시설 | P5·P8 안 `VULNERABLE`, 가까운 응급 이송처(`attrs.emergency`) |
-| E4 대피소 | `SHELTER`의 `capacity`, 마을에서 직선거리 |
+| E4 대피소 | 범위 = 내 리 + 옆 리(`villages.neighbor_ids`)에 있는 `SHELTER`(`village_id`로 고름). 주민 대부분이 걸어서 대피해 마을을 크게 넘기 어려워서. 대피소 자기 위치로 안전 판정, `capacity`, 마을에서 직선거리(순서용) |
 | E5 교통통제 | P5·P8과 겹치는 `road`의 위험 구간(양 끝 마을), 가까운 `POLICE` |
 | E6 재난문자 | 대상 마을의 읍면·리 이름 |
 | E7 구조 요청 | 가까운 `FIRE_STATION`·`POLICE` |
