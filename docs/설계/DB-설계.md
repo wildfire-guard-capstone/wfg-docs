@@ -661,7 +661,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 
 - 코드는 SGIS 코드가 아니라 **법정동코드**로 통일한다. 마을(법정리)·리별 인구가 법정동코드로 연결되기 때문이다(1.4)
 - **넣는 범위**: 시도·시군구는 **전국**(시도 17 · 시군구 약 250), 읍면동은 **관할 시군구만**(의성 18). P5·P8이 관할 밖 시군구(안동·군위 등)나 다른 시도에 걸치는지 알아야 하기 때문이다(LLM 입력 L-17, S6 지휘권 인계)
-- `admin_areas.neighbor_ids`(인접 시군구: S6 동원 범위·L-17)·`villages.neighbor_ids`(옆 리: E4 대피소 범위)·`facilities.sigungu_id`는 경계가 바뀌지 않는 한 고정인 바탕 값이라 적재 때 미리 넣는다(규칙 엔진이 매번 경계를 계산하지 않게). 군위군은 2023년 대구광역시로 편입되어 의성 산불이 군위로 번지면 시도가 2개(경북·대구)에 걸친다
+- `admin_areas.neighbor_ids`(인접 시군구: S6 동원 범위·L-17)·`facilities.sigungu_id`는 경계가 바뀌지 않는 한 고정인 바탕 값이라 적재 때 미리 넣는다(규칙 엔진이 매번 경계를 계산하지 않게). 군위군은 2023년 대구광역시로 편입되어 의성 산불이 군위로 번지면 시도가 2개(경북·대구)에 걸친다
 - 산불 등록 때 `incidents.admin_area_id` = 발화 지점을 포함하는 `EMD` 행(`ST_Contains`)
 
 #### `villages` — 마을(법정리)
@@ -681,7 +681,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | `pop65_est` | int | | 65세 이상 **추정** 인구 |
 | `pop0_14_est` | int | | 0~14세 **추정** 인구 |
 | `houses_est` | int | | 리 안 주택 동수(국토부 GIS건물통합정보 주용도 단독주택·공동주택 건물 수, 의성 합계 23,160동). 화면 표시용이고, 범위 안 동수는 `map_features`(`house`) 점으로 센다 |
-| `neighbor_ids` | bigint[] | NN, 기본 `{}` | **옆 마을** id 목록(경계가 맞닿은 리). 적재할 때 경계로 한 번 계산. 대피소 후보 범위(내 마을 + 옆 마을)에 쓴다. 의성 182리 평균 5.5곳 |
+| ~~`neighbor_ids`~~ | ~~bigint[]~~ | | **만들지 않는다**(11/4). 옆 마을 id 목록이었으나 E4 대피소 후보를 행정 경계와 상관없이 거리로 고르게 바뀌어 쓰는 곳이 없음 |
 
 - `pop65_est`·`pop0_14_est` = 리 인구 × 겹친 SGIS 집계구의 연령 비율(겹친 면적으로 가중). 집계구가 리보다 커서 같은 읍면 안 리들은 비율이 비슷하다(데이터 자원 [M-3]). 이름에 `_est`를 붙여 실제 값이 아님을 드러낸다
 - 장애인 등 다른 취약계층은 넣지 않는다(10/30 결정, 1.4). 시설 입소자는 `facilities`의 취약시설로 다룬다
@@ -709,7 +709,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 
 | `type` | 무엇 | 의성 행 수 | `attrs` | 쓰는 제안 |
 |---|---|---|---|---|
-| `SHELTER` | 대피소 | 84 | `designated`(이재민 임시주거시설 지정) · `used_2025`(2025 산불 때 실제 안내) · `area_m2` · `evac_area_2025`(2025 대피 대상 마을) | E4 · E2 · E6 |
+| `SHELTER` | 대피소 | 84 | `designated`(이재민 임시주거시설 지정) · `used_2025`(2025 산불 때 실제 안내) · `area_m2` · `evac_area_2025`(2025 대피 대상 마을) · `tier`(마을 시설 / 거점 시설, E4. **적재 때 채움**) | E4 · E2 · E6 |
 | `VULNERABLE` | 취약시설(요양원·주야간보호·요양병원·장애인 거주시설 등) | 34 | `occupancy`(현원) · `daytime_only`(주야간보호) · `emergency`(응급실 있음) | S2 · E1 · E3 |
 | `HOSPITAL` | 응급 이송처(관할 밖 응급실 병원) | 3 | `emergency` | E3 |
 | `FIRE_STATION` | 소방서 · 119안전센터 · 119지역대 | 41 | `center`(지역대가 속한 안전센터) | S6 · E7 · 위험도(소방서 거리) |
@@ -864,10 +864,10 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | E2 대피 순서 | `villages.population`·`pop65_est` |
 | S1 대응단계 ④ 시설피해 | **피해 우려** = P5 안에 든 `map_features`(`house`) 점 수 + `HERITAGE` 수(「주택·국가유산 등 주요시설 20동」, p.73·p.80, 시행령 [별표 3] 비고 4). 현재 · 예측 단계 모두 이 값으로 판정. 현재 화선 안 동수는 **피해 발생**으로 따로 셈 |
 | E3 취약시설 | P5·P8 안 `VULNERABLE`, 가까운 응급 이송처(`attrs.emergency`) |
-| E4 대피소 | 범위 = 내 리 + 옆 리(`villages.neighbor_ids`)에 있는 `SHELTER`(`village_id`로 고름). 주민 대부분이 걸어서 대피해 마을을 크게 넘기 어려워서. 대피소 자기 위치로 안전 판정, `capacity`, 마을에서 직선거리(순서용) |
+| E4 대피소 | 대피할 마을마다 `SHELTER`를 **마을 시설**(경로당)과 **거점 시설**(학교·체육관·공공·복지·휴양마을·면사무소)로 나눠 종류마다 **직선거리로 가까운 2곳**. 리·읍면·시군 경계로 자르지 않음(11/4). 대피소 자기 위치로 판정(P0~P5 안 제외 · P6~P8 안 원칙 제외 · P8 밖 안전), `capacity`. 모텔은 후보에서 뺌 |
 | E5 도로 통제 | P0~P5와 겹치는 `road`를 노선 번호(없으면 도로명)로 묶은 구간(양 끝 마을) · 닿는 시각 · 범위 안 길이, 가까운 경찰서(`POLICE` 중 경찰서만) |
 | E6 재난문자 | 대상 마을의 읍면·리 이름 |
-| E7 구조 요청 | 가까운 `FIRE_STATION`·`POLICE` |
+| E7 구조 요청 | 이미 닿은 마을 중 대피 완료 보고가 없는 곳(`incidents.situation.villages`), 가까운 `FIRE_STATION` 중 **소방서**(119안전센터·지역대 제외, 11/5) |
 | S2·S5 보호대상·시설 보호 | P5 안 `VULNERABLE`·`HERITAGE`·`power_line`·`power_tower`·`substation`(고압선 피해 여부 p.114) |
 | S3 자원 배분 | 관할 기지(`resource_bases.coverage_area_ids`)의 대기 대수, 가까운 `water` |
 | S6 유관기관 | `FIRE_STATION`·`POLICE`·응급 이송처, 송전시설이 걸리면 한전(송전시설 보호·우회선로 확보 p.95), 응원 헬기 기지(`resource_bases`) |
@@ -922,7 +922,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | F-25 | E4 대피소 배정 | `facilities`(대피소), `villages` | ✅ | 직선거리 |
 | F-26 | E5 대피 경로·교통통제 | `map_features`(도로), `facilities`(경찰) | ⚠️ | **진화차량 진입로·지정 대피로 데이터 없음** → 통제 구간(P0~P5) + 가까운 경찰서까지, 요청 대상은 LLM(2.6 `map_features`) |
 | F-27 | E6 재난문자·방송 | `villages`, `admin_areas`, `incidents.situation` | ✅ | 송출 여부는 `situation.disaster_sms_sent` |
-| F-28 | E7 인명구조 | `incidents.situation.villages`, `facilities`(소방·경찰) | ✅ | |
+| F-28 | E7 인명구조 | `incidents.situation.villages`, `facilities`(소방서) | ✅ | |
 | F-29 | AI 질의응답 | `qa_messages`, `citations` | ✅ | |
 | F-30 | AI 상황 정정 | `situation_corrections`, `incidents`, `proposals`, `resources` | ✅ | 가용 범위 확인 = `resources` 대기 대수 |
 | F-31 | 진화자원 관리 | `resources`, `resource_bases`, `event_logs` | ⚠️ | 헬기·차량·기지는 됨. **인력은 관리 대상 아님**(F-08과 같음) |
