@@ -4,7 +4,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 
 | 항목 | 내용 |
 |---|---|
-| 최종 갱신 | 2026-11-05 |
+| 최종 갱신 | 2026-11-06 |
 | 기준 | 수정 요구사항 분석서(F-01~F-32), 수정 프로토타입 보고서(49쪽 MVP 7개), 회의 결정(10/10~10/16) |
 | 관련 문서 | [`데이터-자원.md`](데이터-자원.md) |
 | 이전 판 | 설계 원칙·데이터 추출·테이블 후보 32개·계정 묶음 컬럼을 정리했던 이전 판은 Git 이력(PR #21~#28)에 있음 |
@@ -65,7 +65,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | 1 | 산불 병합(P5가 겹치면 하나로) | **제외** | 10/13 회의에서 병합 장면을 뺐고 시연은 의성 한 건. 위험도는 산불별로 계산 |
 | 2 | AI 질의응답 기록 | **질문·답변만 저장** | 답변에도 근거 번호가 붙고(F-13), 근거 부족을 기록해야 함(F-32) |
 | 3 | 기관별 접수 기록(접수 기관·시각·경로 목록) | **제외** (2026-10-23 팀장 결정) | F-02의 「접수 시각」은 `reported_at`으로 충족. 「접수 기관」은 판정·제안에 쓰이지 않는 표시용이라 MVP에서 뺌. 프로토타입 v4에는 줄 단위 입력·표시가 있었음 |
-| 4 | 정정의 진화자원 투입 수("헬기 2대 추가") | **포함** (2026-10-23 팀장 결정) | 정정 가능 항목에 투입 수가 있고, S3(자원 배분) 판정의 입력. 자원 개별 상태(F-08·F-31, 전산 관리자 관리)와 별개로 **산불별 투입 수**로 관리 |
+| 4 | 정정의 진화자원 투입 수("헬기 2대 추가") | **포함** (2026-10-23 팀장 결정) → **2026-11-06 바꿈** | 헬기·차량은 관리자가 자원을 산불에 **연결**한다(`resources.deployed_incident_id`, F-31). S3가 「무엇이 어느 기지에서 투입됐나」를 알려면 자원 단위 연결이 필요하기 때문. 산불별 투입 수(`situation.deployed`)는 **인력과 `resources`에 없는 자원(군·경찰 헬기 등)**만 맡는다 |
 | 5 | 진화예상시간 | **제외** (2026-10-27 팀장 결정) | 매뉴얼 p.73 판단 기준표 4요소 중 하나지만, 시스템이 구할 수 없고 현장 사람이 판단해 알려 줘야 하는 값이다. 매뉴얼의 단계 정의는 피해면적·시설피해 중심이라 나머지 3요소(피해면적·평균풍속·시설피해)로 판정한다. 입력 칸·정정 항목·`incidents.situation`에 두지 않는다 |
 | 6 | 공식 대응단계(산림청장 발령) | **제외** (2026-11-02) | 산림청장이 실제로 발령한 단계는 시스템이 알 수 없다고 가정한다. 산불 보고·상황 정정에서 단계를 입력받지 않고, 현재 단계는 **화선을 보고·정정할 때마다** 규칙 엔진이 그 화선으로 매뉴얼 p.73 판단기준을 적용해 판정하고 `incidents.current_stage`에 넣는다. 제안서는 생성 때 그 값을 `proposals.judged_stage`로 복사하고, 5시간 뒤 단계는 P5 기준(`predicted_stage`) |
 
@@ -161,15 +161,15 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 {
   "villages": { "1024": { "evacuated": true, "evac_order": true } },
   "deployed": {
-    "helicopter": { "total": 28, "forest": 9, "local": 17, "fire": 2, "military": 0 },
-    "vehicle":    { "total": 36, "forest_vehicle": 13, "fire_truck": 21, "other": 2 },
+    "helicopter": { "total": 2, "military": 2 },
+    "vehicle":    { "total": 2, "other": 2 },
     "crew":       { "total": 357, "special_crew": 187, "forest_officials": 113, "fire": 57, "military": 0, "police": 0, "other": 0 }
   },
   "disaster_sms_sent": true
 }
 ```
 
-`deployed` — 이 산불에 **투입된** 진화자원 수. 산림청 「산불 상황 보고」 양식(의성산불백서 부록 3)의 「현재 진화자원」 칸을 그대로 따른다
+`deployed` — 이 산불에 **투입된** 진화자원 수. 산림청 「산불 상황 보고」 양식(의성산불백서 부록 3)의 「현재 진화자원」 칸을 그대로 따른다. **11/6부터 헬기·차량 중 `resources`에 있는 것은 자원 연결(`resources.deployed_incident_id`)로 세고, 여기에는 넣지 않는다** — 여기는 인력과 `resources`에 없는 자원(군·경찰 헬기 등)만. 보고 양식의 합계 = 자원 연결 수 + 이 값
 
 | 키 | 보고 양식 | 구분 |
 |---|---|---|
@@ -549,7 +549,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | 대상 | 정정 가능 항목 | 저장 위치 | 규칙 엔진에서 |
 |---|---|---|---|
 | 마을 | 대피 완료 · 대피명령 | `incidents.situation.villages` | E2·E3 |
-| 진화자원 투입 수 | 헬기 · 장비 · 인력(합계와 기관·종류별, 산림청 상황 보고 양식) | `incidents.situation.deployed` | S3 · S6 · S7 |
+| 진화자원 투입 수 | 인력과 `resources`에 없는 헬기·장비(군·경찰 등) 수(합계와 기관·종류별, 산림청 상황 보고 양식). 헬기·차량 투입은 자원 관리(F-31)에서 산불에 연결(11/6) | `incidents.situation.deployed` | S3 · S7 |
 | 전파 | 재난문자 송출 | `incidents.situation` | E6 |
 | 산불 | 위기경보 | `incidents.alert_level` | S1·S6 |
 
@@ -741,7 +741,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | `power_line` | 송전선(345·154 kV) | 10 | `voltage`(V) | S2 · S5 · S6(한전) |
 | `power_tower` | 송전 철탑 | 159 | — | S5 |
 | `substation` | 변전소·발전소 | 14 | `type`(substation·plant) · `source`(발전소 종류. 의성 12곳 모두 `solar`) | S5 |
-| `water` | 담수지(1 ha 이상 저수지·호수 + 하천 구간) | 147 | `type`(reservoir·lake·river) · `area_ha` | S3 헬기 취수 후보 |
+| `water` | 담수지(1 ha 이상 저수지·호수 + 하천 구간) | 147 | `type`(reservoir·lake·river) · `area_ha` | S3 헬기 취수 후보 — ⚠ 규칙 엔진 S3 정의(11/6)에는 아직 넣지 않음. 쓸지 나중에 정함 |
 | `house` | 주택 건물 1동의 중심점(국토부 GIS건물통합정보, 주용도 단독주택·공동주택) | 23,160 | `use`(단독주택·공동주택) · `code`(리 법정동코드) | S1 시설피해 20동 |
 
 - 종류가 계속 늘 수 있어 `kind`는 ENUM이 아닌 문자열로 둔다
@@ -806,13 +806,15 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | `name` | varchar(50) | NN, UK | 호기·차량 이름. 예: `FPA209`, `경북119-1` |
 | `base_id` | bigint | NN, FK → `resource_bases` | 소속 기지 |
 | `status` | `resource_status` ENUM | NN, 기본 `AVAILABLE` | `AVAILABLE`(대기) · `DEPLOYED`(투입) · `MAINTENANCE`(정비) |
+| `deployed_incident_id` | bigint | FK → `incidents` | **투입된 산불**(11/6). `status = DEPLOYED`일 때만 값이 있고, 그 밖에는 NULL(CHECK). 관리자가 자원을 산불에 연결한다(F-31) |
 | `attrs` | jsonb | NN, 기본 `{}` | 자원의 특징(아래). 예: `{"model": "S-64E", "capacity_l": 8000}` |
 
 - 소속 기관·관할은 기지에 있으므로 자원마다 반복하지 않는다
 - **특징은 `attrs`(jsonb)에 둔다**: 헬기 `model`(기종)·`capacity_l`(담수량 L), 차량 `vehicle_type`(진화차·펌프차·물탱크차 등)·`capacity_l`. 종류마다 특징이 다르고 판정에 꼭 쓰는 값이 아니라서 칸으로 두지 않는다(`facilities`·`map_features`와 같은 방식). 관리 화면 표시에 쓰고, 나중에 「대형 헬기 우선 투입」처럼 판정에 쓰게 되면 그때 키를 정해 읽는다
 - `attrs.vehicle_type` 값: 소방 `펌프차` · `물탱크차` · `산불전문진화차(대형)` · `산불전문진화차(소형)`, 산림청·지자체 `산불진화차` · `산불지휘차` · `고성능진화차`(국회입법조사처 산불대응연구TF 특별보고서 표 4의 차종)
 - 가정값 여부는 DB에 두지 않고 적재 파일(`assumed`·`basis` 칸)과 데이터 폴더 README에 남긴다
-- **산불별 투입 수**(「헬기 2대 추가」)는 이 테이블이 아니라 `incidents.situation.deployed`에 있다(1.3의 4번). 이 테이블은 전체 보유·상태이고, 정정할 때 「보유보다 많이 투입」을 막는 가용 범위 확인에 쓴다(2.5)
+- **헬기·차량의 산불별 투입은 `deployed_incident_id`로 센다**(1.3의 4번, 11/6). 규칙 엔진 S3는 「투입」 = 이 산불에 연결된 자원, 「부를 수 있음」 = `AVAILABLE` 자원으로 센다. 다른 산불에 나간 자원·정비 중인 자원은 자연스럽게 빠진다. 인력과 `resources`에 없는 자원(군·경찰 헬기 등)은 `incidents.situation.deployed`에 숫자로 둔다
+- 시연: 적재 데이터에 투입 상태(`DEPLOYED` + `deployed_incident_id`)를 미리 넣는다. 관리 화면의 상태 변경(F-31)은 FastAPI 단계에서 만든다
 - 다른 테이블이 자원 id를 가리키지 않으므로(투입 수는 숫자) 삭제는 행을 지운다. 등록·수정·삭제는 `event_logs`에 `RESOURCE_UPDATED`(자원 id, 변경 전후 값)로 남는다
 
 **적재 데이터 (시연값, 11/2)** — `data/지도자원/적재/`, `스크립트/build_resources.py`가 만든다
@@ -841,8 +843,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | 화면·판정 | 계산 | 예 |
 |---|---|---|
 | F-08 가용 현황 | 기지별·종류별 대기 대수 | 안동관리소 헬기 대기 4 · 정비 1, 의성군 임차 대기 2 |
-| S3 자원 배분 | 관할 기지의 대기 대수 → 부족하면 응원 | 「관할 헬기 대기 6대(안동관리소 4·의성군 임차 2) 우선 투입」 |
-| S6 지원 요청 | 응원 기지를 발화 지점에서 가까운 순으로, `org_type`으로 요청 기관 | 「가장 가까운 응원 기지 울진관리소(약 89 km) → 산림청에 응원 요청」 |
+| S3 자원 현황 | 이 산불에 연결된 자원(투입), 동원 범위 안 기지별 `AVAILABLE` 대수(부를 수 있음)를 관할 / 응원으로 나눠 발화 지점에서 가까운 순으로 | 「투입: 안동관리소 헬기 3 · 의성소방서 소방차 8 / 부를 수 있음: 의성소방서 소방차 6(관할, 3 km)」 |
 
 **데이터가 쌓이는 방식**
 
@@ -869,7 +870,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | E6 재난문자 | 대상 마을의 읍면·리 이름 |
 | E7 구조 요청 | 이미 닿은 마을 중 대피 완료 보고가 없는 곳(`incidents.situation.villages`), 가까운 `FIRE_STATION` 중 **소방서**(119안전센터·지역대 제외, 11/5) |
 | S2·S5 보호대상·시설 보호 | P5 안 `VULNERABLE`·`HERITAGE`·`power_line`·`power_tower`·`substation`(고압선 피해 여부 p.114) |
-| S3 자원 배분 | 관할 기지(`resource_bases.coverage_area_ids`)의 대기 대수, 가까운 `water` |
+| S3 자원 현황 | 이 산불에 연결된 자원(`resources.deployed_incident_id`), 동원 범위 안 기지(`resource_bases.coverage_area_ids` · 위치)의 `AVAILABLE` 대수 |
 | S6 유관기관 | `FIRE_STATION`·`POLICE`·응급 이송처, 송전시설이 걸리면 한전(송전시설 보호·우회선로 확보 p.95), 응원 헬기 기지(`resource_bases`) |
 | S7 진화인력 안전 | `track`(퇴로 참고) |
 | 위험도 | 취약계층 수(`villages` 추정값 × P5 겹친 비율), 소방서 거리(가장 가까운 `FIRE_STATION`) |
@@ -911,7 +912,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | F-14 | 이력·변경 | `proposals`, `proposal_items`, `situation_corrections` | ✅ | 변경 태그는 직전 버전과 비교해 계산 |
 | F-15 | S1 대응단계·격상 | `proposals`(현재 판정·예측 판정 단계), `incidents` | ✅ | 매뉴얼 p.73 3요소 |
 | F-16 | S2 우선지역·보호대상 | `villages`, `facilities`, `map_features`(송전) | ✅ | 고압선 피해 여부 p.114 |
-| F-17 | S3 자원 배분 | `resource_bases`, `resources`, `map_features`(담수지), `incidents.situation.deployed` | ✅ | 관할 기지 대기 대수 → 응원 |
+| F-17 | S3 자원 현황 | `resource_bases`, `resources`(`deployed_incident_id`), `incidents.situation.deployed` | ✅ | 투입 = 산불에 연결된 자원, 부를 수 있음 = 범위 안 `AVAILABLE`(관할 / 응원) |
 | F-18 | S4 진화 방식·시간대 | `predictions.weather`, `predictions.base_at`, `resources` | ✅ | 일몰 시각은 위경도·날짜로 계산(저장 안 함) |
 | F-19 | S5 시설 보호 | `facilities`(국가유산), `map_features`(송전) | ✅ | |
 | F-20 | S6 유관기관·지휘권 인계 | `facilities`(소방·경찰·응급), `resource_bases`, `admin_areas` | ⚠️ | 테이블은 됨. 지휘권 인계 판정에 **전국 시도·시군구 경계 적재** 필요 |
