@@ -20,7 +20,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 
 이전 판에서 확정한 것 중 MVP에도 그대로 쓰는 것만 남긴다.
 
-- **저장소**: 운영 데이터와 지도 레이어는 PostgreSQL + PostGIS. 래스터(DEM·연료 격자)와 ELMFIRE 입출력은 파일로 두고 DB에는 경로만. 근거 벡터 인덱스는 FAISS 파일
+- **저장소**: 운영 데이터와 지도 레이어는 PostgreSQL + PostGIS. 래스터(DEM·연료 격자)와 ELMFIRE 원본 출력(도달시간 래스터 등)은 파일로 두고 DB에는 경로만. ELMFIRE 출력을 변환한 P1~P8 폴리곤은 DB(`prediction_slices`)에 저장. 근거 벡터 인덱스는 FAISS 파일
 - **좌표계**: EPSG:5179(UTM-K) 하나로 저장, 지도로 보낼 때만 4326으로 변환
 - **키**: 모든 테이블의 기본키는 `bigint` 대리키 `id`
 - **이름**: 영어 snake_case, 테이블은 복수형, 시각은 `_at`(timestamptz)
@@ -68,6 +68,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | 4 | 정정의 진화자원 투입 수("헬기 2대 추가") | **포함** (2026-10-23 팀장 결정) → **2026-11-06 바꿈** | 헬기·차량은 관리자가 자원을 산불에 **연결**한다(`resources.deployed_incident_id`, F-31). S3가 「무엇이 어느 기지에서 투입됐나」를 알려면 자원 단위 연결이 필요하기 때문. 산불별 투입 수(`situation.deployed`)는 **인력과 `resources`에 없는 자원(군·경찰 헬기 등)**만 맡는다 |
 | 5 | 진화예상시간 | **제외** (2026-10-27 팀장 결정) | 매뉴얼 p.73 판단 기준표 4요소 중 하나지만, 시스템이 구할 수 없고 현장 사람이 판단해 알려 줘야 하는 값이다. 매뉴얼의 단계 정의는 피해면적·시설피해 중심이라 나머지 3요소(피해면적·평균풍속·시설피해)로 판정한다. 입력 칸·정정 항목·`incidents.situation`에 두지 않는다 |
 | 6 | 공식 대응단계(산림청장 발령) | **제외** (2026-11-02) | 산림청장이 실제로 발령한 단계는 시스템이 알 수 없다고 가정한다. 산불 보고·상황 정정에서 단계를 입력받지 않고, 현재 단계는 **화선을 보고·정정할 때마다** 규칙 엔진이 그 화선으로 매뉴얼 p.73 판단기준을 적용해 판정하고 `incidents.current_stage`에 넣는다. 제안서는 생성 때 그 값을 `proposals.judged_stage`로 복사하고, 5시간 뒤 단계는 P5 기준(`predicted_stage`) |
+| 7 | 위기경보(관심·주의·경계·심각) | **제외** (2026-11-06) | 산림청이 발령하는 값이고 기준이 산불위험지수·회의 판단이라 규칙 엔진이 판정할 수 없다(매뉴얼 p.50). 판정·제안 어디에도 쓰지 않아 산불 보고 입력·상황 정정 항목·`incidents` 칸에서 뺀다. 매뉴얼의 「경계 → 이송 준비, 심각 → 이송」은 구역(잠재 위험구역 / 위험구역)으로 대신한다(규칙 엔진 E3) |
 
 ### 1.4 설계에 반영할 회의·데이터 결정
 
@@ -148,7 +149,6 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | `reporter_phone` | varchar(20) | NN | 신고자 연락처(규정 제6조제1항제1호). 모르면 「미상」 입력 |
 | `status` | `incident_status` ENUM | NN, 기본 `IN_PROGRESS` | `IN_PROGRESS`(진행 중)·`ENDED`(종료). 화선이 아직 없는지는 `fire_perimeters`에 `version_no ≥ 1`인 행이 있는지로 판단 |
 | `current_stage` | `response_stage` ENUM | NN, 기본 `INITIAL` | **현재 대응단계**: `INITIAL`(초기대응)·`STAGE1`·`STAGE2`(확산대응 1·2단계). 사람이 입력하지 않고, **화선을 보고·정정할 때마다** 규칙 엔진이 그 화선의 면적·그 시각 풍속·시설피해 우려 동수(P5 안 주택 + 국가유산, 시행령 [별표 3] 비고 4)로 판정해 UPDATE(매뉴얼 p.73). 산불 보고 때는 v0(발화점, 면적 0)으로 판정. 산림청장 공식 발령은 두지 않음(1.3의 6번) |
-| `alert_level` | `alert_level` ENUM | NN, 기본 `ATTENTION` | 위기경보: `ATTENTION`(관심)·`CAUTION`(주의)·`ALERT`(경계)·`SERIOUS`(심각). 산불 보고 때 입력, 이후 상황 정정 |
 | `situation` | jsonb | NN, 기본 `{}` | **현재 상황**(아래). 상황 정정으로 바뀜 |
 | `reported_by` | bigint | NN, FK → `users` | 이 산불을 시스템에 **처음 등록한 상황 보고자 계정**. 119에 신고한 사람(`reporter_name`)과 다름 |
 | `created_at` | timestamptz | NN, 기본 now() | 등록 시각 |
@@ -182,8 +182,8 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 
 **데이터가 쌓이는 방식**
 
-- 새 산불 보고 → 1행 INSERT(`IN_PROGRESS`, 보고자가 고른 위기경보). 같은 트랜잭션에서 발화점을 `fire_perimeters` v0으로 INSERT
-- 상황 정정을 확인하면 → `alert_level`·`situation` UPDATE(정정 이력은 `situation_corrections`에 쌓임)
+- 새 산불 보고 → 1행 INSERT(`IN_PROGRESS`). 같은 트랜잭션에서 발화점을 `fire_perimeters` v0으로 INSERT
+- 상황 정정을 확인하면 → `situation` UPDATE(정정 이력은 `situation_corrections`에 쌓임)
 - 종료 → `status = ENDED`, `ended_at`·`ended_by`
 - 삭제하지 않는다. 산불 하나당 행은 계속 1개
 
@@ -196,7 +196,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | F-05 지도 | 발화 지점 표시 |
 | F-09 예측 | 직접 쓰지 않음. 발화점은 `fire_perimeters` v0으로 시작 |
 | F-11·F-15 제안 | `situation`을 규칙 판정 입력으로. 대응단계는 저장하지 않고 규칙 엔진이 판정(1.3의 6번) |
-| F-30 정정 | `alert_level`·`situation` UPDATE |
+| F-30 정정 | `situation` UPDATE |
 | F-03 종료 | `status`. 이후 보고·예측·정정 차단의 기준 |
 
 #### `fire_perimeters` — 실측 화선
@@ -551,7 +551,6 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | 마을 | 대피 완료 · 대피명령 | `incidents.situation.villages` | E2·E3 |
 | 진화자원 투입 수 | 인력과 `resources`에 없는 헬기·장비(군·경찰 등) 수(합계와 기관·종류별, 산림청 상황 보고 양식). 헬기·차량 투입은 자원 관리(F-31)에서 산불에 연결(11/6) | `incidents.situation.deployed` | S3 · S7 |
 | 전파 | 재난문자 송출 | `incidents.situation` | E6 |
-| 산불 | 위기경보 | `incidents.alert_level` | S1·S6 |
 
 - 진화예상시간은 넣지 않는다(1.3의 5번)
 - 자주 나오는 말이 생기면 정정 가능 항목을 하나 추가해 넓힌다. 상황·변경이 jsonb라 테이블은 바뀌지 않는다
@@ -614,7 +613,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 
 **데이터가 쌓이는 방식**
 
-- 정정 「확인」 → 한 트랜잭션으로 `situation_corrections` 1행 INSERT + `incidents`(`situation`·`alert_level`) UPDATE + `event_logs`(`SITUATION_CORRECTED`)
+- 정정 「확인」 → 한 트랜잭션으로 `situation_corrections` 1행 INSERT + `incidents.situation` UPDATE + `event_logs`(`SITUATION_CORRECTED`)
 - 이어서 현재 예측 그대로 규칙 판정·제안 생성 → `proposals`(`CORRECTION`, `correction_id`) 새 버전
   - **제안 생성이 실패해도 정정은 남는다**(UC-QA-02 E2). 마지막 정정 시각 > 현재 제안서 시각이면 화면에 「제안서가 최신 상황을 반영하지 못함 · 다시 생성」을 띄운다
   - **예측 전**(제안서 없음)에 한 정정은 상황만 저장하고 제안서는 만들지 않는다. 다음 예측 때 반영된다
