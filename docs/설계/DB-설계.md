@@ -388,7 +388,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 
 | 테이블 | 1행 = | 내용 |
 |---|---|---|
-| `proposals` | 제안서 버전 1개 | 버전 번호, 기준 예측, 계기, 공식·판정(현재·예측) 대응단계 |
+| `proposals` | 제안서 버전 1개 | 버전 번호, 기준 예측, 계기, 판정(현재·예측) 대응단계, **규칙 엔진 결과 전체**(`context`) |
 | `proposal_items` | 발동한 항목 1개(제안서당 최대 14) | 진화·대피, 항목 코드, 구분, 제안 문장, 상세(판정 이유·대상) |
 | `citations` | 문장 속 근거 번호 [k] 1개 | 어느 근거 청크인지 |
 | `evidence_chunks` | 근거 청크 1개 | 문서·쪽·항목·본문 |
@@ -408,9 +408,12 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | `correction_id` | bigint | FK → `situation_corrections` | 정정 버전일 때만 값이 있음 |
 | `judged_stage` | `response_stage` ENUM | NN | **현재 기준** 대응단계. 생성 당시 `incidents.current_stage`를 복사한다(화선이 바뀌면 그 값이 바뀌므로 그때 값을 남긴다) |
 | `predicted_stage` | `response_stage` ENUM | NN | **예측 기준** 판정 단계. 같은 기준을 P5 면적·0~5시간 평균풍속·P5 안 시설(주택 + 국가유산 동수, `current_stage`와 같은 값)에 적용 |
+| `context` | jsonb | NN, 기본 `{}` | **규칙 엔진 결과 전체**(11/8). 이 버전을 만들 때 엔진이 계산한 주제별 16묶음(`wfg-server` `rules.llm_input`의 `bundles`: 시간 · 면적 · 대응단계 · 지휘권자 · 마을 · 취약시설 · 보호 시설 · 주택 · 대피소 · 도로 · 재난문자 · 동원 범위 · 자원 · 관서 · 확산 방향 · 기상) |
 | `created_at` | timestamptz | NN, 기본 now() | 생성 시각 |
 
 - 유일: `(incident_id, perimeter_version, seq)`
+- **`context`를 두는 이유**: 항목(`proposal_items.detail`)은 엔진 결과 중 그 항목에 필요한 값만 담는다. 같은 사실(마을 목록 · 대응단계 등)을 여러 항목이 쓰므로 전체는 제안서에 **한 번만** 저장한다. ① AI 어시스턴트가 그 버전의 상황 전체를 보고 답한다(LLM 입력 A-03) ② 화선 · 예측이 바뀐 뒤에도 「그때 무엇을 보고 판단했나」를 확인 · 평가할 수 있다
+- 저장 위치 정리: 엔진 결과 전체 = `proposals.context` · 항목 입력 = `proposal_items.detail` · LLM 문장 = `proposal_items.text` · 문장 속 근거 = `citations`
 - 현재 제안서 = 그 산불에서 `id`가 가장 큰 행
 - `perimeter_version`은 `prediction_id → perimeter_id → version_no`로도 구할 수 있지만, 같은 버전 번호가 두 번 생기지 않도록 유일 조건에 쓰려고 저장한다
 - 공식 대응단계(산림청장 발령)는 두지 않는다(1.3의 6번)
