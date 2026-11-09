@@ -8,7 +8,7 @@
 | 상태 | 팀 검토용. P1·P2 API를 `wfg-server` main(`907bd42`)의 실제 라우트·요청/응답과 대조함. 대조하지 않은 P3는 v0.4 그대로 |
 | 저장 예정 위치 | `docs/설계/API-명세서.md` |
 | 기준 저장소 | `wildfire-guard-capstone/wfg-docs`의 main |
-| 고정 기준 커밋 | `43dc969703cdb65192e07e1341785ce38bca60c6` |
+| 고정 기준 커밋 | v0.4 설계 원본 `43dc969703cdb65192e07e1341785ce38bca60c6` · v0.5 DB 대조 `4025a901d1b69e6ced9d8f0b7b48fd2cc1b97096` · 서버 `907bd42ea9b5c96704b0511567ec79e8b9dfecf5` |
 | GitHub 반영 | `docs/api-spec-v0.5` 작업 브랜치 · main 병합 전 팀 검토용 |
 
 > 이 문서는 노션 v0.3의 단순 복사본이 아닙니다. 아래 설계 문서 5개를 다시 읽어 현재 결정에 맞춰 API 계약을 재작성했습니다. 도메인 규칙의 근거와 API 작성자가 제안한 전송 형식을 구분합니다. 경로·권한표·응답 래퍼·작업 조회·확인 토큰·추가 DTO 필드는 서버 구현 완료나 팀 합의를 뜻하지 않습니다.
@@ -35,14 +35,14 @@
 
 | 문서 | 표기된 최종 갱신일 | API에 반영한 내용 |
 | --- | --- | --- |
-| [DB-설계.md](https://github.com/wildfire-guard-capstone/wfg-docs/blob/43dc969703cdb65192e07e1341785ce38bca60c6/docs/설계/DB-설계.md) | 2026-11-05 | 계정·산불·화선·예측·제안·정정·지도·기지·자원의 필드·제약·저장 흐름 |
+| [DB-설계.md](https://github.com/wildfire-guard-capstone/wfg-docs/blob/4025a901d1b69e6ced9d8f0b7b48fd2cc1b97096/docs/설계/DB-설계.md) | 2026-11-09 | v0.5 DB 대조 기준: 제안서 context·근거 스냅샷·자원 연결을 포함한 필드·저장 흐름. v0.4 작성 당시의 DB 기준은 11/5 판 |
 | [규칙-엔진-설계.md](https://github.com/wildfire-guard-capstone/wfg-docs/blob/43dc969703cdb65192e07e1341785ce38bca60c6/docs/설계/규칙-엔진-설계.md) | 2026-11-05 | 현재/P5 단계, S1~S6·E1~E7(v0.5: 11/7 12항목 S1~S6·E1~E6), context·items, 지도 targets·대피소·도로 구간 |
 | [LLM-입력-정리.md](https://github.com/wildfire-guard-capstone/wfg-docs/blob/43dc969703cdb65192e07e1341785ce38bca60c6/docs/설계/LLM-입력-정리.md) | 2026-10-27 | 수치·판정은 규칙 엔진, LLM은 문장 생성, 질의·정정 입력. 표 안에는 11/1~11/5 검토 메모도 있음 |
 | [데이터-자원.md](https://github.com/wildfire-guard-capstone/wfg-docs/blob/43dc969703cdb65192e07e1341785ce38bca60c6/docs/설계/데이터-자원.md) | 2026-10-30 | 자료 출처·확보 범위·제외 항목·추정값·시연 자료 한계. 이후 작성된 메모도 있음 |
 | [위험도-정리.md](https://github.com/wildfire-guard-capstone/wfg-docs/blob/43dc969703cdb65192e07e1341785ce38bca60c6/docs/설계/위험도-정리.md) | 2026-10-26 | 23개 변수·원가중치 합 0.94·가용 변수 가중평균·미결 계산 기준 |
 | `wfg-server` main `907bd42` (v0.5) | 2026-11-10 | P1·P2 실제 라우트·요청/응답·오류 코드. 제안 항목 12개(S1~S6·E1~E6, 11/7)와 제안서 저장 구조(DB-설계 2.4, 11/9) |
 
-파일 머리의 갱신일만으로 우선순위를 정하지 않습니다. 같은 주제의 명시된 결정과 해당 절의 최신 검토 메모를 우선했습니다. 예를 들어 DB의 `detail.targets` 옛 객체 예시보다 11/5 규칙 엔진의 대상 참조 형식을 따르고, 서로 충돌하거나 구현 방식이 없는 것은 9절에 남겼습니다. 여기서 인용한 매뉴얼 기준은 팀 설계 문서에 적힌 내용이며 이번 작업에서 원문 매뉴얼을 별도로 재검증하지 않았습니다.
+파일 머리의 갱신일만으로 우선순위를 정하지 않습니다. 같은 주제의 명시된 결정과 해당 절의 최신 검토 메모를 우선합니다. 설계 문서 4개의 고정 링크는 v0.4 작성 근거를 보존한 것이며, v0.5는 위의 11/9 DB 설계와 서버 907bd42를 추가로 대조했습니다. v0.5 제안 응답에서는 과거 detail.targets·지도 강조 계약을 제외합니다. 충돌·미결은 9절에 남깁니다. 매뉴얼 기준은 팀 설계 문서에 적힌 내용이며 이번 작업에서 원문 매뉴얼을 별도로 재검증하지 않았습니다.
 
 ### 포함·제외 범위
 
@@ -141,7 +141,7 @@
 ### 2.4 중복·동시 작업 — 구현 합의 필요
 
 - INC-02, PER-02, PER-03, PRED-01, COR-01, PROP-05에는 `Idempotency-Key`(요청별 UUID 문자열)를 필수로 제안합니다. 네트워크 재시도는 같은 키·같은 본문, 새 사용자 동작은 새 키입니다.
-- 키는 사용자·산불(해당 시)·경로·요청 본문에 결합합니다. 동일 요청 재전송은 이미 확정된 정정/보고/작업 결과를 반환하고 행·버전을 중복 생성하지 않습니다. 같은 키로 다른 본문은 409 `IDEMPOTENCY_KEY_REUSED`입니다.
+- 결과를 재전달하는 멱등 처리가 확정된 것은 아래 INC-02입니다. PER-02·03·PRED-01은 키를 받는 것만으로 같은 성공 응답 재전달을 보장하지 않습니다. COR-01·PROP-05의 멱등 저장·재전달은 아직 검토 제안입니다. 같은 키로 다른 본문의 409 `IDEMPOTENCY_KEY_REUSED`는 INC-02에 적용합니다.
 - 산불별 advisory lock으로 중복 예측·제안 커밋·종료·정정을 조율합니다. 계산 중에는 긴 DB 트랜잭션을 열지 않고 커밋 직전에 종료·화선·상황 변경을 다시 확인합니다.
 - **INC-02 확정(v0.5)**: 같은 보고자·같은 키·같은 본문을 다시 보내면 처음 만든 산불을 그대로 201로 돌려주고, 같은 키·다른 본문은 409 `IDEMPOTENCY_KEY_REUSED`입니다. 키는 최대 100자이며 DB(`incidents.idempotency_key`)에 저장합니다. 서버는 키 없이도 받습니다(이때 중복을 막지 않음). PER-02·03·PRED-01은 키를 받기만 하며, 같은 요청의 재전송은 409 `STALE_PERIMETER`·`PREDICTION_RUNNING`으로 막힙니다.
 - situation_revision은 DB 컬럼으로 확정하지 않은 불투명 토큰입니다. **v0.5 서버는 `rev-{최신 상황 정정 id}`(정정이 없으면 `rev-0`) 임시 값이며, 상황 정정(COR-01)을 둘지 정할 때 함께 확정합니다(확인 필요).** 최신 정정 id만으로 충분한지, 관리자/배치 변경·기상·자원 갱신을 어떻게 감지할지 Q-05·Q-06에서 합의합니다.
@@ -976,12 +976,12 @@ predictions에는 성공 결과만 저장합니다. 진행·실패 상태는 Ope
 | 필드 | 타입 | 필수·null | 설명 |
 | --- | --- | --- | --- |
 | chunk_id | string | 필수 | 근거 청크 코드(예: SM-p073-s01). 문단의 evidence 목록과 같은 값 |
-| label | string | 필수 | 화면 표기(「p.73」, 「시행령 제21조①·②」) |
-| doc_name | string | 필수 | 문서명 |
+| label | string 또는 null | 필수·null 허용 | 화면 표기(「p.73」, 「시행령 제21조①·②」). 원자료에 없으면 null |
+| doc_name | string 또는 null | 필수·null 허용 | 문서명. 원자료에 없으면 null |
 | section | string 또는 null | 필수·null 허용 | 절·조항 |
 | page | integer 또는 null | 필수·null 허용 | 쪽. 법령처럼 쪽이 없으면 null |
-| origin | string | 필수 | 「판정 근거」(규칙 엔진이 지정) · 「검색」(근거 검색으로 찾음). **한글 그대로** |
-| text | string | 필수 | 원문 전체. 제안서를 저장할 때의 스냅샷 |
+| origin | string 또는 null | 필수·null 허용 | 「판정 근거」(규칙 엔진이 지정) · 「검색」(근거 검색으로 찾음). **한글 그대로**, 원자료에 없으면 null |
+| text | string 또는 null | 필수·null 허용 | 원문 전체. 제안서를 저장할 때의 스냅샷, 원자료에 없으면 null |
 
 항목이 실제로 인용한 원문만 항목과 함께 저장해 돌려줍니다(DB-설계 2.4, 11/9). 근거 자료가 나중에 바뀌어도 그때 본 원문이 남습니다. 원문 코퍼스 · 검색은 GPU 서버(RAG)에 있고 이 API로 노출하지 않습니다.
 
@@ -1057,7 +1057,7 @@ predictions에는 성공 결과만 저장합니다. 진행·실패 상태는 Ope
 | state | ProposalItemState | 필수 | 생성 · 일부 생성 · 실패 · 재사용 · 해당 없음 |
 | categories | ItemCategory[] | 필수 | 문단 구분을 중복 없이 즉시→대기→협의→요청 순서로. 실패 · 해당 없음이면 [] |
 | finding | string | 필수 | 판정 한 줄(규칙 엔진). S1의 값이 격상 대비 안내 내용. 해당 없음이면 "" |
-| withheld | {field, reason}[] | 선택 | 엔진이 판단하지 않은 것(자료 · 기준 없음) |
+| withheld | {field, reason}[] 또는 null | 선택·null 허용 | 엔진이 판단하지 않은 것(자료 · 기준 없음). 서버 기본값 null도 처리 |
 | change_type | ChangeType 또는 null | 필수·null 허용 | 바로 앞 버전의 같은 항목과 비교한 값(아래 「변경」 판단). 첫 버전 · 해당 없음이면 null |
 | sections | ProposalSection[] | 필수 | 카드 본문 |
 | evidence | Evidence[] | 필수 | 이 항목이 인용한 근거 원문 |
@@ -3495,7 +3495,7 @@ Resource의 id를 제외한 kind·name·base_id 필수, status 생략 시 AVAILA
 
 **Request Body**
 
-kind·name·base_id·status·attrs·deployed_incident_id 중 1개 이상(v0.5: status=DEPLOYED로 바꾸면 deployed_incident_id 필수, 다른 상태면 null로 풀림). 타입·제약은 Resource 등록과 같고 null 불가
+kind·name·base_id·status·attrs·deployed_incident_id 중 1개 이상(v0.5: status=DEPLOYED로 바꾸면 deployed_incident_id 필수, 다른 상태면 null로 풀림). 타입·제약은 Resource 등록과 같고 deployed_incident_id만 null 허용
 
 ```json
 {
@@ -4928,12 +4928,12 @@ R = Σ(포함 변수의 원가중치 × 등급) ÷ Σ(포함 변수의 원가중
 
 | ID | 확인할 내용 | 현재 근거·질문 | 영향 |
 | --- | --- | --- | --- |
-| Q-01 | 위험도 저장·계산·종료 정책 | **v0.5 일부 확정**: 위험도를 못 구해도 예측·제안은 저장하고 RISK-01만 data: null. 아래는 미결 — DB 4.2: predictions 컬럼 추가/별도 risk_assessments, 등급 래스터 저장소, 종료 후 최대 위험도 표시가 미결. 변수별 구간 경계·수분/지형복잡도·임상도 변환·격자 30/100m·기상 시점/공간·취약인구 범위·소방서 거리 기준·최종 표시 등급도 확인. 위험도 미산출 시 예측 전체 실패인지 부분 허용인지 합의 | RISK-01, PRED-01, E2·AI |
+| Q-01 | 위험도 저장·계산·종료 정책 | **v0.5 일부 확정**: 위험도를 못 구해도 예측·제안은 저장하고 RISK-01만 data: null. 아래는 미결 — DB 4.2: predictions 컬럼 추가/별도 risk_assessments, 등급 래스터 저장소, 종료 후 최대 위험도 표시가 미결. 변수별 구간 경계·수분/지형복잡도·임상도 변환·격자 30/100m·기상 시점/공간·취약인구 범위·소방서 거리 기준·최종 표시 등급도 확인. 미산출의 부분 허용 결정과 현재 서버의 시험용 위험도(fake-0)는 구분 | RISK-01, PRED-01, E2·AI |
 | Q-02 | 현재 단계 판정 시 P5 가용 시점 | **v0.5 확정**: current_stage는 예측할 때 판정(보고·정정 때 판정 안 함, STAGE_INPUT_UNAVAILABLE 삭제). **남은 것**: 관측시각 역전 — 서버는 422 INVALID_OBSERVED_AT(확인 필요). 원래 질문 — DB는 산불/화선 보고 때 current_stage 판정, 시설피해 우려는 P5 안 주택+국가유산으로 규정. 최초 보고·새 화선 보고 직후 해당 P5가 아직 없거나 최신 화선과 예측 기준이 다를 때 무엇으로 판정할지 불명확. 예측 전 시설피해 결측·기상 수신 실패·NN 단계 저장·관측시각 역전도 함께 결정 | INC-02, PER-02·03, S1 |
 | Q-03 | 위기경보 유지 여부 | **v0.5 닫음**: 위기경보(alert_level)를 API·DB에서 삭제. 원래 질문 — DB는 alert_level 입력·정정 유지, LLM·규칙 문서는 쓰는 곳이 없어 제외/팀 논의. API는 DB 필드로 남기되 실제 입력 UI·필수 여부·정정 범위를 최종 확인 | INC·COR, S1·S6 |
 | Q-04 | detail·targets 최종 계약 | **v0.5 닫음**: 제안서 응답에 detail·targets를 넣지 않음(finding·withheld만, 지도 강조 MVP 제외). 원래 질문 — DB 옛 예시는 targets 객체, 최신 엔진은 문자열 배열. 이름 참조·kind 포함 참조도 혼재. 서버 어댑터의 PK 기반 정규화·저장 위치·권한 검증·외부 한글/영문 categories 매핑을 확정 | PROP·MAP·E5·E6 |
 | Q-05 | 작업·멱등키·동시성 | **v0.5 일부 확정**: INC-02 Idempotency-Key는 DB 저장(2.4). 예측 작업 기록은 서버 메모리(재시작 시 사라짐), 작업 실패 error.code 이름(PREDICTION_INVALID·PROPOSAL_FAILED·INTERNAL_ERROR)은 확인 필요. 원래 질문 — 202/작업 조회는 API 제안. 작업 큐·공유 저장소·보존기간·재시작 복구, idempotency 결과 재전달, 화선·상황·자원 변경·종료 중 커밋 정책을 확정. predictions에는 성공 행만 저장 | PRED·COR·PROP-05·보고 |
-| Q-06 | 제안 stale·정정 반영 기준 | **v0.5**: 서버의 situation_revision은 rev-{최신 정정 id} 임시 값, proposal_stale은 최신 정정 시각 > 최신 제안서 시각. 상황 정정(COR-01)을 둘지 정할 때 함께 확정. 규칙 엔진 결과 전체는 proposals.context에 저장(DB 11/9). 원래 질문 — DB는 정정시각과 제안시각 비교. 다중 정정·재시도·여러 쓰기 경로·동일시각·재생성 대상을 안전하게 판별할 revision을 어떻게 둘지 결정. rule context 저장 위치도 DB에 없음(proposals.context는 제안일 뿐) | INC-03, COR, PROP-05, AI |
+| Q-06 | 제안 stale·정정 반영 기준 | **v0.5**: 서버의 situation_revision은 rev-{최신 정정 id} 임시 값, proposal_stale은 최신 정정 시각 > 최신 제안서 시각. 상황 정정(COR-01)을 둘지 정할 때 함께 확정. 규칙 엔진 결과 전체는 proposals.context에 저장(DB 11/9). 원래 질문 — DB는 정정시각과 제안시각 비교. 다중 정정·재시도·여러 쓰기 경로·동일시각·재생성 대상을 안전하게 판별할 revision을 어떻게 둘지 결정. 과거에는 context 저장 위치가 미정이었으나 현재 11/9 DB에는 proposals.context가 정의됨 | INC-03, COR, PROP-05, AI |
 | Q-07 | S7·미결 규칙·근거 준비 | **v0.5 대부분 닫음**: S7 없음(12항목 S1~S6·E1~E6, 11/7). 근거 청킹·검색·인용 검증은 백엔드 에이전트 내부이고 API는 저장된 evidence만 돌려줌. 원래 질문 — 주 확산 방향·S7 facts, 시군구 최소 겹침면적(구현 기본 1ha 제안), 표준매뉴얼 청킹·rule_basis→실제 chunk 매핑·추가 검색 K·인용/숫자 검증을 확인. 문서에 적힌 코드가 실제 검색 가능한 청크임을 가정하지 않음 | 규칙·PROP·AI·EVD |
 | Q-08 | 역할·인접 범위·개인정보 | VIEWER의 제안/근거/AI 접근, REPORTER 지도·상황 반환 범위, 관할 밖 소방·경찰·병원·응원 자원, 신고자 이름·전화 마스킹, 내부 매뉴얼 본문·원문 공개 범위를 확인 | 권한 전체·INC·MAP·RES·EVD |
 | Q-09 | 인증·관리 API 운영 | 실제 라우트·응답 형식·CORS, JWT 만료값·로그아웃 폐기, 비밀번호 재발급 시 기존 JWT 무효화·초기 변경 강제·관리자 계정 발급 범위, 자원 동시 편집 방식을 확인. DB에 없는 세션/토큰버전/자원 updated_at은 구현 완료로 가정하지 않음 | AUTH·USR·RES |
@@ -4987,6 +4987,7 @@ P1·P2 API를 서버 구현(`wfg-server` main `907bd42`)과 대조해 고쳤습�
 | --- | --- | --- |
 | 2026-10-30 | v0.3 | 기존 노션 API 초안(이 문서의 이전 기준) |
 | 2026-11-06 | v0.4 검토본 | main 고정 커밋의 설계 5개 재검토, 46개 API·요청/응답·규칙/지도 계약 재작성. docs/api-spec-v0.4 브랜치에 추가 |
-| 2026-11-10 | v0.5 검토본 | wfg-server main(907bd42)과 P1·P2 대조. 제안서 계약 재작성, EVD-01 삭제·WTH-01 추가, 위기경보 삭제. docs/api-spec-v0.5 브랜치 |
+| 2026-11-10 | v0.5 검토본 | wfg-server main(907bd42)과 P1·P2 대조. 제안서 계약 재작성, EVD-01 삭제·WTH-01 추가, 위기경보 삭제. PR #66 병합 검토에서 Evidence/withheld null 허용, 재시도 보장 범위·DB 대조 출처를 보정 |
 
 요청·응답 타입과 미결 항목을 팀에서 검토한 후 main에 병합합니다. v0.5는 docs/api-spec-v0.5 작업 브랜치에서 검토하며 다른 설계 파일은 수정하지 않습니다. 이후 API 계약을 바꾸면 관련 DTO·프론트 타입·목업 응답·서버 OpenAPI도 같은 변경에 맞춰 관리합니다.
+
