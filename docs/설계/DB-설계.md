@@ -4,7 +4,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 
 | 항목 | 내용 |
 |---|---|
-| 최종 갱신 | 2026-11-08 |
+| 최종 갱신 | 2026-11-09 |
 | 기준 | 수정 요구사항 분석서(F-01~F-32), 수정 프로토타입 보고서(49쪽 MVP 7개), 회의 결정(10/10~10/16) |
 | 관련 문서 | [`데이터-자원.md`](데이터-자원.md) |
 | 이전 판 | 설계 원칙·데이터 추출·테이블 후보 32개·계정 묶음 컬럼을 정리했던 이전 판은 Git 이력(PR #21~#28)에 있음 |
@@ -69,6 +69,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | 5 | 진화예상시간 | **제외** (2026-10-27 팀장 결정) | 매뉴얼 p.73 판단 기준표 4요소 중 하나지만, 시스템이 구할 수 없고 현장 사람이 판단해 알려 줘야 하는 값이다. 매뉴얼의 단계 정의는 피해면적·시설피해 중심이라 나머지 3요소(피해면적·평균풍속·시설피해)로 판정한다. 입력 칸·정정 항목·`incidents.situation`에 두지 않는다 |
 | 6 | 공식 대응단계(산림청장 발령) | **제외** (2026-11-02) | 산림청장이 실제로 발령한 단계는 시스템이 알 수 없다고 가정한다. 산불 보고·상황 정정에서 단계를 입력받지 않고, 현재 단계는 **화선을 보고·정정할 때마다** 규칙 엔진이 그 화선으로 매뉴얼 p.73 판단기준을 적용해 판정하고 `incidents.current_stage`에 넣는다. 제안서는 생성 때 그 값을 `proposals.judged_stage`로 복사하고, 5시간 뒤 단계는 P5 기준(`predicted_stage`) |
 | 7 | 위기경보(관심·주의·경계·심각) | **제외** (2026-11-06) | 산림청이 발령하는 값이고 기준이 산불위험지수·회의 판단이라 규칙 엔진이 판정할 수 없다(매뉴얼 p.50). 판정·제안 어디에도 쓰지 않아 산불 보고 입력·상황 정정 항목·`incidents` 칸에서 뺀다. 매뉴얼의 「경계 → 이송 준비, 심각 → 이송」은 구역(잠재 위험구역 / 위험구역)으로 대신한다(규칙 엔진 E3) |
+| 8 | 근거 청크(매뉴얼 · 법령 코퍼스) | **DB에 두지 않음** (2026-11-09) | 원문 코퍼스와 검색은 GPU 서버(RAG)에 있다. 제안서에 **실제로 인용한 원문만** 항목과 함께 저장한다(`proposal_items.evidence`, 그 회차 그대로). 그래서 근거 조회 화면은 우리 DB만 읽고, 근거 자료가 바뀌어도 「그때 무엇을 보고 제안했나」가 남는다. `evidence_chunks` · `citations` 테이블은 두지 않는다 |
 
 ### 1.4 설계에 반영할 회의·데이터 결정
 
@@ -384,14 +385,14 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 
 ### 2.4 제안
 
-예측이 끝나면 규칙 엔진이 판정하고, 근거를 검색하고, LLM이 진화 S1~S7·대피 E1~E7 항목의 제안 문장을 써서 **제안서 새 버전**으로 저장한다. 제안서는 예측이 있어야만 생긴다. 상황 정정(F-30)은 예측을 다시 돌리지 않고 같은 예측으로 제안서만 새 버전을 만든다.
+예측이 끝나면 규칙 엔진이 판정하고, 에이전트(GPU 서버)가 근거를 검색해 LLM으로 진화 S1~S6 · 대피 E1~E6(12개, 11/7) 항목의 제안 문단을 써서 **제안서 새 버전**으로 저장한다. 저장 모양은 에이전트 출력(wfg-server `agent/generate.py`) 그대로다. 제안서는 예측이 있어야만 생긴다. 상황 정정(F-30)은 예측을 다시 돌리지 않고 같은 예측으로 제안서만 새 버전을 만든다.
 
 | 테이블 | 1행 = | 내용 |
 |---|---|---|
 | `proposals` | 제안서 버전 1개 | 버전 번호, 기준 예측, 계기, 판정(현재·예측) 대응단계, **규칙 엔진 결과 전체**(`context`) |
-| `proposal_items` | 발동한 항목 1개(제안서당 최대 14) | 진화·대피, 항목 코드, 구분, 제안 문장, 상세(판정 이유·대상) |
-| `citations` | 문장 속 근거 번호 [k] 1개 | 어느 근거 청크인지 |
-| `evidence_chunks` | 근거 청크 1개 | 문서·쪽·항목·본문 |
+| `proposal_items` | 발동한 항목 1개(제안서당 최대 12) | 진화·대피, 항목 코드, **상태**, 구분, **화면 배치**(문단 · 목록 · 표), **인용한 원문**, 규칙 엔진 입력 |
+
+근거 청크 테이블은 두지 않는다(1.3의 8번) — 인용한 원문은 항목의 `evidence`에 같이 저장한다.
 
 #### `proposals` — 제안서
 
@@ -413,7 +414,9 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 
 - 유일: `(incident_id, perimeter_version, seq)`
 - **`context`를 두는 이유**: 항목(`proposal_items.detail`)은 엔진 결과 중 그 항목에 필요한 값만 담는다. 같은 사실(마을 목록 · 대응단계 등)을 여러 항목이 쓰므로 전체는 제안서에 **한 번만** 저장한다. ① AI 어시스턴트가 그 버전의 상황 전체를 보고 답한다(LLM 입력 A-03) ② 화선 · 예측이 바뀐 뒤에도 「그때 무엇을 보고 판단했나」를 확인 · 평가할 수 있다
-- 저장 위치 정리: 엔진 결과 전체 = `proposals.context` · 항목 입력 = `proposal_items.detail` · LLM 문장 = `proposal_items.text` · 문장 속 근거 = `citations`
+- 저장 위치 정리: 엔진 결과 전체 = `proposals.context` · 항목 입력 = `proposal_items.detail` · 화면 배치(문단 · 목록 · 표) = `proposal_items.sections` · 인용한 원문 = `proposal_items.evidence` · 제안 문장만 = `proposal_items.text`
+- 읽는 사람 · 지휘권자(현재 · 다음)는 칸을 두지 않고 `context`의 지휘권자 묶음에서 꺼낸다
+- **API 응답 값은 한글**(11/9): 제안서 응답(PROP-01~03)은 ENUM을 한글 값으로 준다(`예측 갱신` · `확산대응 1단계` · `진화` · `즉시`). `sections` 안(에이전트 출력)이 이미 한글이라 섞이지 않게 한다. DB에는 영문 이름으로 저장한다
 - 현재 제안서 = 그 산불에서 `id`가 가장 큰 행
 - `perimeter_version`은 `prediction_id → perimeter_id → version_no`로도 구할 수 있지만, 같은 버전 번호가 두 번 생기지 않도록 유일 조건에 쓰려고 저장한다
 - 공식 대응단계(산림청장 발령)는 두지 않는다(1.3의 6번)
@@ -431,7 +434,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 
 #### `proposal_items` — 제안 항목
 
-**어떤 테이블**: 제안서 하나에서 **발동한 항목 1개 = 1행**. 발동하지 않은 항목과 근거를 찾지 못한 항목은 행을 만들지 않는다.
+**어떤 테이블**: 제안서 하나에서 **발동한 항목 1개 = 1행**(S1~E6 모두 같은 모양). 발동하지 않은 항목은 행을 만들지 않는다. 검사를 통과한 제안이 없는 항목도 `state = failed`로 저장해 화면에 안내한다. 에이전트가 만든 항목 결과를 거의 그대로 저장한다(11/9).
 
 | 컬럼 | 타입 | 제약 | 설명 |
 |---|---|---|---|
@@ -439,86 +442,87 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | `proposal_id` | bigint | NN, FK → `proposals` | |
 | `axis` | `item_axis` ENUM | NN | `SUPPRESSION`(진화) · `EVACUATION`(대피). 진화·대피 탭 구분 |
 | `item_code` | varchar(10) | NN | 항목 코드. 예: `S1`. **ENUM이 아닌 문자열**이라 항목이 늘거나 줄어도 DB는 그대로다 |
-| `categories` | `item_category[]` | NN | 구분(하나 이상): `IMMEDIATE`(즉시) · `STANDBY`(대기) · `CONSULT`(협의) · `REQUEST`(요청). 예: S5 시설 보호는 소방차 배치 「즉시」 + 한전 전류 차단 「요청」 |
-| `text` | text | NN | 제안 문장. 문장 끝에 근거 번호 [k]. 근거 없는 수량은 「근거가 부족하여 표시하지 않았습니다」로 둔다 |
-| `detail` | jsonb | NN, 기본 `{}` | **규칙 엔진이 이 항목에 대해 판정한 내용**(아래). LLM에 넘긴 판정 값이 그대로 남는다 |
+| `state` | varchar(10) | NN, CHECK | **항목 결과**: `ok`(생성) · `partial`(일부 생성 — 검사에 걸린 제안을 빼거나 다룰 주제가 빠짐) · `failed`(통과한 제안 없음) · `reused`(직전 회차와 입력이 같아 그 제안을 다시 씀). 화면 배지, 다음 회차 재사용 판단 |
+| `categories` | `item_category[]` | NN | 문단 구분 모음: `IMMEDIATE`(즉시) · `STANDBY`(대기) · `CONSULT`(협의) · `REQUEST`(요청). 구분 필터 · 건수. `failed`면 빈 배열(「하나 이상」 조건은 11/9에 뺌) |
+| `sections` | jsonb | NN, 기본 `[]` | **화면 배치 그대로**(아래) — 소제목 · 제안 문단 · 목록 · 표 · ※ |
+| `evidence` | jsonb | NN, 기본 `[]` | **이 항목이 인용한 원문**(아래) — 문서 · 쪽 · 조항 · 원문 전체 |
+| `text` | text | NN | 제안 문장만 이은 글(문단 `body`를 줄바꿈으로, `failed`면 빈 문자열). 미리보기 · 직전 버전 비교 · AI 질의 |
+| `detail` | jsonb | NN, 기본 `{}` | **규칙 엔진 항목 입력**(아래) — 이름 · 판정 한 줄 · 판정 수치 · 대상 · 빠진 정보 |
+| `input_key` | varchar(16) | | 에이전트 입력 지문. 다음 회차에 같으면 LLM을 다시 부르지 않고 이 제안을 재사용한다 |
 
-`detail` — 규칙 엔진이 판정한 내용
-
-- 규칙 엔진이 항목마다 판정한 값은 LLM에 넘겨 제안 문장(`text`)을 쓰게 하고, 같은 값을 `detail`에 저장한다. 판정 값은 규칙 엔진이 정하고 LLM은 바꾸지 못하므로, 규칙 엔진의 결과(`detail`)와 LLM의 문장(`text`)을 나눠 둔다
-- 항목마다 판정 값의 모양이 다르고 규칙 엔진을 만들면서 계속 바뀌므로 jsonb로 둔다. **구체적인 키는 규칙 엔진을 설계할 때 정한다**
-- 지금 화면에서 쓰는 것은 두 가지다: 판정 이유 문장(펼침 상세), 대상 마을·시설 id(지도 강조)
+`sections` — 화면 배치(에이전트 출력 그대로)
 
 ```json
-{
-  "finding": "현재 피해면적 8 ha / P5 233 ha → 확산대응 2단계 기준",
-  "targets": { "villages": [1024], "facilities": [55] }
-}
+[{"title": "", "blocks": [
+  {"type": "paragraph", "category": "즉시",
+   "body": "괴산리, 신월리 주민을 안평면분회경로당(0.9km) 및 안평초등학교(1.1km)로 대피하도록 지시하십시오.",
+   "cite": "[p.79]", "quote": "산불로부터 안전한 경로를 이용하고, … 대피장소로 선정",
+   "evidence": ["SM-p079-s02"], "topic": "대피소", "source": "llm"},
+  {"type": "list", "rows": [{"text": "**괴산리**(지금, 147명): 먼저 모일 곳 …"}]},
+  {"type": "note", "text": "8시간 범위 안에 든 대피소가 없어 …"}
+]}]
 ```
 
+- 블록 종류: `paragraph`(제안 문단 — LLM, 판정 값이 든 상황 문장은 코드) · `list` · `table` · `note`(규칙 엔진) · `failed`(통과한 제안 없음 안내)
+- 문단마다 구분 1개 · 근거 표기(`cite`, 예 `[p.79]`) · 근거 문장(`quote`) · 인용 원문 ID(`evidence` → 같은 항목 `evidence[].chunk_id`). 구분은 문장이 아니라 **문단마다** 붙는다
+- 문단에는 이 밖에 `text`(본문 + 표기) · `situation` · `action_text` · `action` · `quote_ok`가 있다. 고치지 않고 통째로 저장한다
+
+`evidence` — 인용한 원문(그 회차 그대로)
+
+| 키 | 예 | 화면 |
+|---|---|---|
+| `chunk_id` | `SM-p079-s02` | 문단과 원문을 잇는 열쇠 |
+| `label` | `p.79` · `시행령 제21조①·②` | 근거 표기 |
+| `doc_name` | 「산불 재난」 위기관리 표준매뉴얼 | 원문 머리 |
+| `section` · `page` | 제21조(산불 진화 통합지휘) · `"79"` | 조문 · 쪽(없으면 null) |
+| `origin` | `판정 근거` · `검색` | 규칙 엔진이 판정에 쓴 근거 / 검색으로 찾은 근거 |
+| `text` | (원문 전체) | 「제안에 쓴 근거 원문」 펼치기 |
+
+- 그 회차에 **실제로 인용한 원문만** 저장한다(검색한 전부가 아님). 원문 코퍼스는 우리 DB에 없다(1.3의 8번)
+- 같은 원문을 여러 항목이 인용하면 항목마다 한 벌씩 들어간다(제안서 1개에 수십 KB)
+- 표준매뉴얼 원문이 들어 있으므로 로그인한 지휘권자에게만 보이고, 저장소 · 공개 주소에는 올리지 않는다
+
+`detail` — 규칙 엔진 항목 입력
+
+- 규칙 엔진이 항목마다 만든 입력(LLM에 넘긴 판정 값)을 그대로 저장한다: `name` · `status` · `finding`(판정 한 줄) · `facts`(판정 수치) · `targets`(대상, 예 `village:164` · `facility:99`) · `withheld`(`[{field, reason}]`) 등. 키는 wfg-server `rules/items/*.py`가 정한다
+- 판정 값은 규칙 엔진이 정하고 LLM은 바꾸지 못하므로, 엔진 입력(`detail`)과 화면 결과(`sections`)를 나눠 둔다
+- 지도 대상 강조(`targets`)는 **MVP에서 하지 않는다**(11/9)
+- 결과 파일을 적재해 넣을 때는 엔진 입력 전체가 없어 `name` · `finding` · `withheld`만 들어간다
+
 - 유일: `(proposal_id, item_code)`
-- 컬럼으로 둔 것(`axis`·`item_code`·`categories`·`text`)은 DB가 쓰는 값이다: 진화·대피 탭, 유일 조건, 구분 필터·건수, 직전 버전 비교, 근거 연결. 화면에 보여 주기만 하는 값은 `detail`에 둔다
 - **항목 목록**(항목 코드·이름·순서)은 DB에 두지 않고 **코드 상수**로 둔다. 항목을 추가하려면 어차피 규칙 엔진 판정 로직과 LLM 프롬프트를 함께 바꿔야 하기 때문이다. 없어진 항목도 상수에서 지우지 않고 「사용 안 함」으로 남겨 지난 제안서의 이름이 그대로 나오게 한다
 - 권한(직접·협의·요청)은 저장하지 않는다. 항목마다 고정값이고, 구분에 이미 협의·요청이 있어 화면에도 보여 주지 않는다
-- 근거를 찾지 못해 뺀 항목은 `event_logs`에 `ITEM_NO_EVIDENCE`(제안서 id·항목 코드)로 남긴다
-- 바뀐 항목이 없어도 새 버전에는 발동한 항목을 모두 새로 저장한다. 버전 하나만 읽어도 제안서 전체가 보이게 하기 위함이다
+- 검사에 끝까지 걸려 뺀 제안(문단)은 저장하지 않고 `event_logs`에 `ITEM_NO_EVIDENCE`(제안서 id · 항목 코드 · 뺀 개수)로 남긴다
+- 바뀐 항목이 없어도 새 버전에는 발동한 항목을 모두 새로 저장한다(`reused`도 직전 내용을 복사). 버전 하나만 읽어도 제안서 전체가 보이게 하기 위함이다
 - 「변경」 태그(F-14)는 저장하지 않는다. 직전 버전과 `item_code`끼리 `categories`·`text`를 비교해 계산한다. 새로 생긴 항목·빠진 항목도 같은 비교로 알 수 있다
 
-#### `citations` — 근거 인용
+#### 근거 원문 — 테이블을 두지 않는다(11/9)
 
-**어떤 테이블**: 제안 문장이나 AI 답변 속 **근거 번호 [k] 1개 = 1행**.
-
-| 컬럼 | 타입 | 제약 | 설명 |
-|---|---|---|---|
-| `id` | bigint | PK | |
-| `item_id` | bigint | FK → `proposal_items` | 제안 문장의 근거 |
-| `message_id` | bigint | FK → `qa_messages` | AI 답변의 근거(F-29) |
-| `k` | smallint | NN | 문장 속 번호 |
-| `chunk_id` | bigint | NN, FK → `evidence_chunks` | |
-
-- `item_id`와 `message_id` 중 **하나만** 값이 있다(CHECK)
-- 유일: `(item_id, k)`, `(message_id, k)`
-
-#### `evidence_chunks` — 근거 청크
-
-**어떤 테이블**: 매뉴얼·법령·규정을 잘라 둔 **청크 1개 = 1행**. 서비스가 만드는 것이 아니라 RAG 준비 작업(청킹·임베딩)의 결과를 넣는다. LLM은 GPU 서버에서 돌지만, 근거 검색과 근거 조회에 쓰는 청크는 이 테이블에 둔다.
-
-| 컬럼 | 타입 | 제약 | 설명 |
-|---|---|---|---|
-| `id` | bigint | PK | |
-| `code` | varchar(50) | NN, UK | 청크 이름. 예: `SM-p073-01`. **한 번 정하면 바꾸지 않는다** |
-| `doc_name` | varchar(200) | NN | 예: 「산불 재난」 위기관리 표준매뉴얼(2026.6) |
-| `page` | int | | 쪽. 법령처럼 쪽이 없으면 NULL |
-| `section` | varchar(200) | | 항목·조항. 예: 대응단계 판단기준 |
-| `text` | text | NN | 본문(약 400자). LLM 입력이자 근거 조회 화면에 그대로 표시 |
-| `item_codes` | varchar(10)[] | | 연결 항목(예: `S1`). 검색할 때 항목으로 거르는 데 쓴다 |
-| `retired_at` | timestamptz | | 다시 청킹해서 더 쓰지 않게 된 시각. **NULL이면 검색 대상** |
-
-- 다시 청킹하면 새 `code`로 행을 추가하고 옛 행은 `retired_at`만 기록한다. 지난 제안서의 근거가 계속 열려야 하기 때문이다
-- 벡터(임베딩)는 **미정**이다. pgvector로 정하면 이 테이블에 `embedding` 컬럼 하나를 더하고, FAISS로 정하면 DB 밖 파일에 두고 FAISS 번호 ↔ `code` 대응만 둔다(근거 저장소 결정, 김지오)
-- 근거 요약은 두지 않는다. 근거 조회 화면에 본문을 그대로 보여 준다
+- 예전 설계의 `evidence_chunks`(청크 1개 = 1행) · `citations`(문장 속 근거 번호 1개 = 1행)는 두지 않는다(1.3의 8번). 이미 만든 두 테이블은 마이그레이션으로 지운다
+- 근거 조회(F-13)는 문단의 `evidence`(청크 ID) → 같은 항목 `evidence[]`(원문)로 잇는다
+- AI 답변의 근거(F-29)도 같은 방식으로 `qa_messages`에 같이 둔다(2.5)
 
 **데이터가 쌓이는 방식**
 
-- 예측 → P1~P8 → (위험도) → 제안서 계산을 모두 마친 뒤, `proposals` 1행 + `proposal_items` 최대 14행 + `citations`를 예측과 **한 트랜잭션**으로 저장한다. 실패하면 아무것도 남지 않는다(UC-PRED-01 E3)
-- 상황 정정 확인 → 같은 `prediction_id`로 `proposals` 1행(`CORRECTION`, `seq` + 1)과 항목·인용을 새로 저장
+- 예측 → P1~P8 → (위험도) → 제안서 계산을 모두 마친 뒤, `proposals` 1행 + `proposal_items` 최대 12행을 예측과 **한 트랜잭션**으로 저장한다. 실패하면 아무것도 남지 않는다(UC-PRED-01 E3)
+- 상황 정정 확인 → 같은 `prediction_id`로 `proposals` 1행(`CORRECTION`, `seq` + 1)과 항목을 새로 저장
 - 저장하면 `event_logs`에 `PROPOSAL_CREATED`(버전·계기·변경 항목 수)
 - 고치거나 지우지 않는다. 종료된 산불은 새 버전을 만들지 않고, 마지막 버전을 조회만 한다
-- `evidence_chunks`는 RAG 준비 작업에서 한 번 넣고, 다시 청킹할 때만 추가한다
+- 지금(MVP)은 에이전트가 GPU 서버에서만 돌아, 그 결과 파일(제안서 JSON)을 적재 명령으로 넣는다. 나중에는 예측 요청(PRED-01)이 에이전트를 불러 같은 저장 함수로 넣는다
 
 **기능에서 쓰이는 곳**
 
 | 기능 | 사용 |
 |---|---|
-| F-11 제안서 생성·상세 | 4개 테이블 INSERT, 펼침 상세에 `detail`(판정 이유·대상)·근거 목록 |
+| F-11 제안서 생성·상세 | `proposals` · `proposal_items` INSERT. 화면은 `sections`(문단 · 목록 · 표) · `evidence`(근거 원문) · `detail`(판정 한 줄 · 빠진 정보) · `state`(항목 배지) |
 | 제안서 머리 | 버전(`perimeter_version`.`seq`) · `created_at` · `trigger` · 기준 화선(`prediction_id → perimeter_id`) · `judged_stage`·`predicted_stage` |
 | F-15 대응단계·격상 | 현재 단계 `judged_stage`, `predicted_stage`가 더 높으면 격상 대비 안내 |
 | F-12 분류 | `axis`(진화·대피 탭), `categories`(구분 필터·건수) |
 | F-16~F-28 항목별 제안 | `proposal_items` 항목별 행 |
-| 대상 지도 강조 | `detail.targets`의 마을·시설 id → `villages`·`facilities`(2.6) |
-| F-13 근거 조회 | `citations` → `evidence_chunks`(문서·쪽·항목·본문), 어느 문장의 근거인지는 `proposal_items.text` |
+| 대상 지도 강조 | `detail.targets`의 마을·시설 id → `villages`·`facilities`(2.6). **MVP에서 하지 않음**(11/9) |
+| F-13 근거 조회 | 문단의 `evidence`(청크 ID) → 같은 항목 `evidence[]`(문서 · 쪽 · 조항 · 원문 전체) |
 | F-14 이력·변경 | 산불별 `proposals` 목록, 직전 버전과 항목 비교 |
-| F-29 AI 답변 근거 | `citations.message_id` → `qa_messages`(2.5) |
+| F-29 AI 답변 근거 | `qa_messages`에 답변과 함께(2.5) |
 | F-30 정정 버전 | `trigger = CORRECTION`, `correction_id` → `situation_corrections`(2.5) |
 | F-03 종료 | 종료 후 새 버전 차단, 조회만 |
 
@@ -605,10 +609,10 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | `proposal_id` | bigint | FK → `proposals` | 질문할 때 보고 있던 제안서. 예측 전이면 NULL |
 | `item_code` | varchar(10) | | 「이 항목 질문」으로 지정한 항목. 없으면 NULL |
 | `question` | text | NN | 질문 |
-| `answer` | text | NN | 답변. 근거 번호 [k] 포함 |
+| `answer` | text | NN | 답변. 근거 표기 포함 |
 | `created_at` | timestamptz | NN, 기본 now() | |
 
-- 답변 속 [k]는 `citations.message_id`로 근거 청크를 가리킨다
+- 답변의 근거는 `citations` 대신 이 행에 같이 둔다 — AI 질의응답(AI-01)을 만들 때 `evidence` jsonb 칸을 더한다(제안 항목의 `evidence`와 같은 모양, 11/9)
 - 질문마다 따로 답한다(앞 질문을 이어 받는 여러 턴 대화는 MVP에서 하지 않음)
 - 근거를 찾지 못하면 추측하지 않고 「근거를 찾지 못했습니다」로 답하고 `event_logs`에 남긴다(UC-QA-01 E1)
 - 정정으로 판별된 입력은 여기에 저장하지 않고 확인 카드로 넘긴다. 확인하면 `situation_corrections.input_text`에 남는다
@@ -620,7 +624,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 - 이어서 현재 예측 그대로 규칙 판정·제안 생성 → `proposals`(`CORRECTION`, `correction_id`) 새 버전
   - **제안 생성이 실패해도 정정은 남는다**(UC-QA-02 E2). 마지막 정정 시각 > 현재 제안서 시각이면 화면에 「제안서가 최신 상황을 반영하지 못함 · 다시 생성」을 띄운다
   - **예측 전**(제안서 없음)에 한 정정은 상황만 저장하고 제안서는 만들지 않는다. 다음 예측 때 반영된다
-- 질문 → 답변을 받으면 `qa_messages` 1행 + `citations`
+- 질문 → 답변을 받으면 `qa_messages` 1행(답변 · 근거 함께)
 - 고치거나 지우지 않는다. 종료된 산불은 정정을 막고 질문만 받는다
 
 **기능에서 쓰이는 곳**
@@ -629,7 +633,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 |---|---|
 | F-30 상황 정정 | `situation_corrections` INSERT, `incidents` UPDATE, 제안서 새 버전 |
 | F-14 「제안 변경사항」 창 | `proposals.correction_id` → `changes`(무엇을 정정했는지) |
-| F-29 AI 질의응답 | `qa_messages` INSERT, 답변 근거는 `citations` |
+| F-29 AI 질의응답 | `qa_messages` INSERT, 답변 근거도 같은 행 |
 | F-29 「이 항목 질문」 | `qa_messages.item_code` |
 | F-32 이벤트 로그 | `SITUATION_CORRECTED`, 근거 부족 |
 | F-03 종료 | 종료 후 정정 차단 |
@@ -668,7 +672,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 
 #### `villages` — 마을(법정리)
 
-**어떤 테이블**: 법정리 1개 = 1행. 위험구역 판정(E1)과 대피 순서(E2)의 단위이고, `incidents.situation.villages`와 `proposal_items.detail.targets.villages`의 키가 이 `id`다.
+**어떤 테이블**: 법정리 1개 = 1행. 위험구역 판정(E1)과 대피 순서(E2)의 단위이고, `incidents.situation.villages`와 `proposal_items.detail.targets`(`village:{id}`)의 id가 이 `id`다.
 
 | 컬럼 | 타입 | 제약 | 설명 |
 |---|---|---|---|
@@ -911,9 +915,9 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | F-08 | 가용 현황 | `resources`, `resource_bases`, `incidents.situation.deployed` | ⚠️ | 헬기·차량은 기지별 상태로 됨. **인력은 개별 자원이 없음**(1.4 진화대 제외) → 산불별 투입 수만 |
 | F-09 | 확산 예측 실행 | `predictions`, `prediction_slices`, `fire_perimeters` | ✅ | 한 트랜잭션으로 예측 → 제안서까지 |
 | F-10 | 산불 위험도 조회 | — | ❌ | **위험도 결과(R·등급·요인별 기여)를 담을 곳이 없음**. 4.2의 1번 |
-| F-11 | 대응 제안 생성·상세 | `proposals`, `proposal_items`, `citations`, `evidence_chunks` | ✅ | 판정 이유·대상은 `detail` |
+| F-11 | 대응 제안 생성·상세 | `proposals`, `proposal_items` | ✅ | 화면은 `sections` · `evidence`, 판정은 `detail`(11/9) |
 | F-12 | 제안 분류 | `proposal_items.axis`·`categories` | ✅ | |
-| F-13 | 근거 조회 | `citations`, `evidence_chunks` | ✅ | |
+| F-13 | 근거 조회 | `proposal_items.evidence` | ✅ | 인용한 원문을 항목과 함께 저장(11/9) |
 | F-14 | 이력·변경 | `proposals`, `proposal_items`, `situation_corrections` | ✅ | 변경 태그는 직전 버전과 비교해 계산 |
 | F-15 | S1 대응단계·격상 | `proposals`(현재 판정·예측 판정 단계), `incidents` | ✅ | 매뉴얼 p.73 3요소 |
 | F-16 | S2 우선지역·보호대상 | `villages`, `facilities`, `map_features`(송전) | ✅ | 고압선 피해 여부 p.114 |
@@ -929,7 +933,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | F-26 | E5 대피 경로·교통통제 | `map_features`(도로), `facilities`(경찰) | ⚠️ | **진화차량 진입로·지정 대피로 데이터 없음** → 통제 구간(P0~P5) + 가까운 경찰서까지, 요청 대상은 LLM(2.6 `map_features`) |
 | F-27 | E6 재난문자·방송 | `villages`, `admin_areas`, `incidents.situation` | ✅ | 송출 여부는 `situation.disaster_sms_sent` |
 | F-28 | E7 인명구조 | `incidents.situation.villages`, `facilities`(소방서) | ✅ | |
-| F-29 | AI 질의응답 | `qa_messages`, `citations` | ✅ | |
+| F-29 | AI 질의응답 | `qa_messages` | ✅ | 답변 근거도 같은 행(AI-01 때 칸 추가) |
 | F-30 | AI 상황 정정 | `situation_corrections`, `incidents`, `proposals`, `resources` | ✅ | 가용 범위 확인 = `resources` 대기 대수 |
 | F-31 | 진화자원 관리 | `resources`, `resource_bases`, `event_logs` | ⚠️ | 헬기·차량·기지는 됨. **인력은 관리 대상 아님**(F-08과 같음) |
 | F-32 | 이벤트 로그 | `event_logs` | ✅ | 추가만. `action` 예: `LOGIN_FAILED`, `PREDICTION_FAILED`, `PROPOSAL_CREATED`, `ITEM_NO_EVIDENCE`, `RESOURCE_UPDATED` |
