@@ -155,6 +155,8 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | `created_at` | timestamptz | NN, 기본 now() | 등록 시각 |
 | `ended_at` | timestamptz | | 종료 시각 |
 | `ended_by` | bigint | FK → `users` | 종료 처리한 통합지휘권자 계정. 산불현황에 「종료 18:00 · cmd01」로 표시 |
+| `idempotency_key` | varchar(100) | UNIQUE(`reported_by`, `idempotency_key`) | 보고 요청 번호(API 헤더 `Idempotency-Key`, 11/10). 같은 보고자가 같은 번호로 다시 보내면(통신 재전송) 새로 만들지 않고 이 산불을 돌려준다. 번호 없이 보고하면 NULL |
+| `request_hash` | varchar(64) | | 그 보고 요청 본문의 해시(SHA-256). 같은 번호에 다른 본문이 오면 거절(409 `IDEMPOTENCY_KEY_REUSED`)하려고 둔다 |
 
 `situation` 형태 — 마을 키는 `villages.id`:
 
