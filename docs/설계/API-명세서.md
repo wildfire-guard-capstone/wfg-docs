@@ -2,16 +2,18 @@
 
 | 항목 | 내용 |
 | --- | --- |
-| 문서 판 | v0.4 · 최신 설계 반영 검토본 |
-| 작성·조회 기준일 | 2026-11-06 |
+| 문서 판 | v0.5 · 서버 구현 대조 검토본 |
+| 작성·조회 기준일 | 2026-11-10 (v0.4: 2026-11-06) |
 | 범위 | React·TypeScript·MapLibre 프론트엔드 ↔ FastAPI 백엔드 REST API |
-| 상태 | 팀 검토용 설계 초안. 실제 서버 라우트·OpenAPI·실행 결과 대조 전 |
+| 상태 | 팀 검토용. P1·P2 API를 `wfg-server` main(`907bd42`)의 실제 라우트·요청/응답과 대조함. 대조하지 않은 P3는 v0.4 그대로 |
 | 저장 예정 위치 | `docs/설계/API-명세서.md` |
 | 기준 저장소 | `wildfire-guard-capstone/wfg-docs`의 main |
-| 고정 기준 커밋 | `43dc969703cdb65192e07e1341785ce38bca60c6` |
-| GitHub 반영 | `docs/api-spec-v0.4` 작업 브랜치 · main 병합 전 팀 검토용 |
+| 고정 기준 커밋 | v0.4 설계 원본 `43dc969703cdb65192e07e1341785ce38bca60c6` · v0.5 DB 대조 `4025a901d1b69e6ced9d8f0b7b48fd2cc1b97096` · 서버 `907bd42ea9b5c96704b0511567ec79e8b9dfecf5` |
+| GitHub 반영 | `docs/api-spec-v0.5` 작업 브랜치 · main 병합 전 팀 검토용 |
 
 > 이 문서는 노션 v0.3의 단순 복사본이 아닙니다. 아래 설계 문서 5개를 다시 읽어 현재 결정에 맞춰 API 계약을 재작성했습니다. 도메인 규칙의 근거와 API 작성자가 제안한 전송 형식을 구분합니다. 경로·권한표·응답 래퍼·작업 조회·확인 토큰·추가 DTO 필드는 서버 구현 완료나 팀 합의를 뜻하지 않습니다.
+
+> **v0.5**: v0.4를 서버 구현과 대조해 고친 판입니다. 성공·실패 구조는 v0.4를 따르고, 바뀐 곳(항목 12개 제안서 응답, 위기경보 삭제, 근거 원문을 제안서 안으로, 지금 날씨 API 추가 등)은 [10절](#changes)에 모았습니다. 아직 정하지 않은 것은 **확인 필요**로 표시했습니다.
 
 ## 목차
 
@@ -21,10 +23,10 @@
 - [4. 공통 DTO](#dtos)
 - [5. API 전체 목록](#index)
 - [6. API 상세](#endpoints)
-- [7. 지도·규칙 엔진 결과의 화면 적용](#rules)
+- [7. 지도 레이어와 위험도 변수](#rules)
 - [8. 화면 연동 순서와 검증 항목](#flow)
 - [9. 구현 전 팀 확인 사항](#questions)
-- [10. 노션 v0.3에서 바뀐 내용](#changes)
+- [10. 바뀐 내용(v0.4 → v0.5, v0.3 → v0.4)](#changes)
 
 <a id="sources"></a>
 
@@ -33,13 +35,14 @@
 
 | 문서 | 표기된 최종 갱신일 | API에 반영한 내용 |
 | --- | --- | --- |
-| [DB-설계.md](https://github.com/wildfire-guard-capstone/wfg-docs/blob/43dc969703cdb65192e07e1341785ce38bca60c6/docs/설계/DB-설계.md) | 2026-11-05 | 계정·산불·화선·예측·제안·정정·지도·기지·자원의 필드·제약·저장 흐름 |
-| [규칙-엔진-설계.md](https://github.com/wildfire-guard-capstone/wfg-docs/blob/43dc969703cdb65192e07e1341785ce38bca60c6/docs/설계/규칙-엔진-설계.md) | 2026-11-05 | 현재/P5 단계, S1~S6·E1~E7, context·items, 지도 targets·대피소·도로 구간 |
+| [DB-설계.md](https://github.com/wildfire-guard-capstone/wfg-docs/blob/4025a901d1b69e6ced9d8f0b7b48fd2cc1b97096/docs/설계/DB-설계.md) | 2026-11-09 | v0.5 DB 대조 기준: 제안서 context·근거 스냅샷·자원 연결을 포함한 필드·저장 흐름. v0.4 작성 당시의 DB 기준은 11/5 판 |
+| [규칙-엔진-설계.md](https://github.com/wildfire-guard-capstone/wfg-docs/blob/43dc969703cdb65192e07e1341785ce38bca60c6/docs/설계/규칙-엔진-설계.md) | 2026-11-05 | 현재/P5 단계, S1~S6·E1~E7(v0.5: 11/7 12항목 S1~S6·E1~E6), context·items, 지도 targets·대피소·도로 구간 |
 | [LLM-입력-정리.md](https://github.com/wildfire-guard-capstone/wfg-docs/blob/43dc969703cdb65192e07e1341785ce38bca60c6/docs/설계/LLM-입력-정리.md) | 2026-10-27 | 수치·판정은 규칙 엔진, LLM은 문장 생성, 질의·정정 입력. 표 안에는 11/1~11/5 검토 메모도 있음 |
 | [데이터-자원.md](https://github.com/wildfire-guard-capstone/wfg-docs/blob/43dc969703cdb65192e07e1341785ce38bca60c6/docs/설계/데이터-자원.md) | 2026-10-30 | 자료 출처·확보 범위·제외 항목·추정값·시연 자료 한계. 이후 작성된 메모도 있음 |
 | [위험도-정리.md](https://github.com/wildfire-guard-capstone/wfg-docs/blob/43dc969703cdb65192e07e1341785ce38bca60c6/docs/설계/위험도-정리.md) | 2026-10-26 | 23개 변수·원가중치 합 0.94·가용 변수 가중평균·미결 계산 기준 |
+| `wfg-server` main `907bd42` (v0.5) | 2026-11-10 | P1·P2 실제 라우트·요청/응답·오류 코드. 제안 항목 12개(S1~S6·E1~E6, 11/7)와 제안서 저장 구조(DB-설계 2.4, 11/9) |
 
-파일 머리의 갱신일만으로 우선순위를 정하지 않습니다. 같은 주제의 명시된 결정과 해당 절의 최신 검토 메모를 우선했습니다. 예를 들어 DB의 `detail.targets` 옛 객체 예시보다 11/5 규칙 엔진의 대상 참조 형식을 따르고, 서로 충돌하거나 구현 방식이 없는 것은 9절에 남겼습니다. 여기서 인용한 매뉴얼 기준은 팀 설계 문서에 적힌 내용이며 이번 작업에서 원문 매뉴얼을 별도로 재검증하지 않았습니다.
+파일 머리의 갱신일만으로 우선순위를 정하지 않습니다. 같은 주제의 명시된 결정과 해당 절의 최신 검토 메모를 우선합니다. 설계 문서 4개의 고정 링크는 v0.4 작성 근거를 보존한 것이며, v0.5는 위의 11/9 DB 설계와 서버 907bd42를 추가로 대조했습니다. v0.5 제안 응답에서는 과거 detail.targets·지도 강조 계약을 제외합니다. 충돌·미결은 9절에 남깁니다. 매뉴얼 기준은 팀 설계 문서에 적힌 내용이며 이번 작업에서 원문 매뉴얼을 별도로 재검증하지 않았습니다.
 
 ### 포함·제외 범위
 
@@ -138,9 +141,10 @@
 ### 2.4 중복·동시 작업 — 구현 합의 필요
 
 - INC-02, PER-02, PER-03, PRED-01, COR-01, PROP-05에는 `Idempotency-Key`(요청별 UUID 문자열)를 필수로 제안합니다. 네트워크 재시도는 같은 키·같은 본문, 새 사용자 동작은 새 키입니다.
-- 키는 사용자·산불(해당 시)·경로·요청 본문에 결합합니다. 동일 요청 재전송은 이미 확정된 정정/보고/작업 결과를 반환하고 행·버전을 중복 생성하지 않습니다. 같은 키로 다른 본문은 409 `IDEMPOTENCY_KEY_REUSED`입니다.
+- 결과를 재전달하는 멱등 처리가 확정된 것은 아래 INC-02입니다. PER-02·03·PRED-01은 키를 받는 것만으로 같은 성공 응답 재전달을 보장하지 않습니다. COR-01·PROP-05의 멱등 저장·재전달은 아직 검토 제안입니다. 같은 키로 다른 본문의 409 `IDEMPOTENCY_KEY_REUSED`는 INC-02에 적용합니다.
 - 산불별 advisory lock으로 중복 예측·제안 커밋·종료·정정을 조율합니다. 계산 중에는 긴 DB 트랜잭션을 열지 않고 커밋 직전에 종료·화선·상황 변경을 다시 확인합니다.
-- situation_revision은 DB 컬럼으로 확정하지 않은 불투명 토큰입니다. 최신 정정 id만으로 충분한지, 관리자/배치 변경·기상·자원 갱신을 어떻게 감지할지 Q-05·Q-06에서 합의합니다.
+- **INC-02 확정(v0.5)**: 같은 보고자·같은 키·같은 본문을 다시 보내면 처음 만든 산불을 그대로 201로 돌려주고, 같은 키·다른 본문은 409 `IDEMPOTENCY_KEY_REUSED`입니다. 키는 최대 100자이며 DB(`incidents.idempotency_key`)에 저장합니다. 서버는 키 없이도 받습니다(이때 중복을 막지 않음). PER-02·03·PRED-01은 키를 받기만 하며, 같은 요청의 재전송은 409 `STALE_PERIMETER`·`PREDICTION_RUNNING`으로 막힙니다.
+- situation_revision은 DB 컬럼으로 확정하지 않은 불투명 토큰입니다. **v0.5 서버는 `rev-{최신 상황 정정 id}`(정정이 없으면 `rev-0`) 임시 값이며, 상황 정정(COR-01)을 둘지 정할 때 함께 확정합니다(확인 필요).** 최신 정정 id만으로 충분한지, 관리자/배치 변경·기상·자원 갱신을 어떻게 감지할지 Q-05·Q-06에서 합의합니다.
 - 작업·중복키 결과 보존, 프로세스 재시작·다중 worker, 키 만료·응답 재전달은 Q-05의 구현 전 확인 사항입니다.
 
 <a id="enums"></a>
@@ -154,7 +158,7 @@
 | COMMANDER | 통합지휘권자 | 관할 현황·지도·자원·예측·위험도·제안·근거·질의·정정·이력·종료 |
 | VIEWER | 열람자 | 관할 현황·지도·자원·예측·위험도 읽기. 제안·AI 접근은 이 초안에서 제외, Q-08 확인 |
 | REPORTER | 상황 보고자 | 관할 산불 등록·보고 정보·보고 지도·화선 보고·정정. 분석 데이터는 제한 |
-| ADMIN | 전산 관리자 | 계정·기지·자원 관리와 해당 로그. 지휘권자 기능을 자동 부여하지 않음 |
+| ADMIN | 전산 관리자 | 계정·기지·자원 관리와 해당 로그, 진행 중 산불 목록(INC-01, 전체 지역 — 자원을 산불에 연결할 때 선택). 지휘권자 기능을 자동 부여하지 않음 |
 
 위 세부 접근 범위는 DB의 4개 역할을 화면 기능에 매핑한 제안입니다. 다른 계정이 보낸 role·admin_area_id로 조회 권한을 넓히지 않습니다. 인접 시군 자원·시설은 백엔드가 확정한 지원 조회 범위에서만 제공합니다.
 
@@ -166,7 +170,6 @@
 | UserRole | COMMANDER, VIEWER, REPORTER, ADMIN | DB users.role |
 | IncidentStatus | IN_PROGRESS, ENDED | 실측 화선 없음은 별도 상태 대신 v0으로 구분 |
 | ResponseStage | INITIAL, STAGE1, STAGE2 | 현재·예측 판정 단계. 공식 발령 단계가 아님 |
-| AlertLevel | ATTENTION, CAUTION, ALERT, SERIOUS | DB 위기경보, 유지·활용 여부 팀 논의 |
 | ItemAxis | SUPPRESSION, EVACUATION | 진화/대피 |
 | ItemCategory | IMMEDIATE, STANDBY, CONSULT, REQUEST | 즉시/대기/협의/요청 |
 | ResourceKind | HELICOPTER, VEHICLE | 개별 인력 없음 |
@@ -174,8 +177,12 @@
 | FacilityType | SHELTER, VULNERABLE, HOSPITAL, FIRE_STATION, POLICE, HERITAGE | DB facilities.type, 적재 CSV의 소문자 type은 적재 시 변환 |
 | AdminLevel | SIDO, SIGUNGU, EMD | 행정구역 |
 | OperationStatus | QUEUED, RUNNING, SUCCEEDED, FAILED | API 작업 계층 제안, predictions DB ENUM이 아님 |
+| ProposalItemState | GENERATED, PARTIAL, FAILED, REUSED, NOT_TRIGGERED | 제안 항목 상태: 생성/일부 생성/실패(검사를 통과한 제안 없음)/재사용(직전 회차 그대로)/해당 없음(발동 안 함) (v0.5) |
+| ChangeType | NEW, CHANGED, SAME | PROP-02·03 항목의 직전 버전 대비 표시 (v0.4의 ADDED/CHANGED/UNCHANGED 대체, v0.5) |
+| DiffItemChange | CHANGED, NEW, REMOVED | PROP-04 바뀐 항목: 변경/신규/빠짐 (v0.5) |
+| DiffProposalChange | ADDED, REMOVED, MODIFIED | PROP-04 바뀐 제안 문단: 새 제안/없어진 제안/바뀐 제안 (v0.5) |
 
-DB의 영문 ENUM과 규칙 엔진의 한글 표시는 구분합니다. 예를 들어 `detail.categories=["즉시", "요청"]`는 규칙 원문이고, 외부 항목의 `categories=["IMMEDIATE", "REQUEST"]`는 서버 어댑터가 매핑한 값입니다. 현재 문서에 없는 미래의 응답 문자열은 프론트에서 기본 표시로 처리할 수 있어야 합니다.
+DB의 영문 ENUM과 규칙 엔진·LLM의 한글 표시는 구분합니다. 제안 문단의 구분은 저장값이 「즉시」 같은 한글이어도 응답에서는 `IMMEDIATE` 같은 영문 코드로 바꿔 보냅니다. **한글 그대로 보내는 값은 두 개뿐**입니다: 근거 `Evidence.origin`(판정 근거·검색), 기상 `hours[].kind`(관측·예보·고정·파일). 판정 한 줄·제안 문장·항목 이름 같은 화면 글은 한글입니다. 현재 문서에 없는 미래의 응답 문자열은 프론트에서 기본 표시로 처리할 수 있어야 합니다.
 
 <a id="dtos"></a>
 
@@ -328,6 +335,7 @@ DB의 영문 ENUM과 규칙 엔진의 한글 표시는 구분합니다. 예를 �
 | base_id | ID | 필수 | 소속 resource_bases.id |
 | status | ResourceStatus | 필수 | AVAILABLE / DEPLOYED / MAINTENANCE |
 | attrs | object | 필수 | 헬기: model·capacity_l, 차량: vehicle_type·capacity_l. 값이 없으면 키 생략 |
+| deployed_incident_id | ID 또는 null | 필수·null 허용 | status=DEPLOYED면 투입된 산불, 아니면 null (DB 11/6, v0.5) |
 
 기지와 소속을 분리합니다. DB에 없는 updated_at·deleted_at·실시간 좌표를 자원 DTO에 추가하지 않습니다. 삭제는 실제 행 삭제입니다.
 
@@ -343,7 +351,8 @@ DB의 영문 ENUM과 규칙 엔진의 한글 표시는 구분합니다. 예를 �
   "attrs": {
     "model": "시연 기종",
     "capacity_l": 8000
-  }
+  },
+  "deployed_incident_id": null
 }
 ```
 
@@ -466,8 +475,7 @@ DB의 영문 ENUM과 규칙 엔진의 한글 표시는 구분합니다. 예를 �
 | reporter_org | string 또는 null | 필수·null 허용 | 최대 100자, 신고 기관명. 기관별 접수 목록 아님 |
 | reporter_name / reporter_phone | string 또는 null | 필수·null 허용 | DB 저장은 성명 50자·연락처 20자 필수, 미상 허용. 역할별 응답 마스킹 정책은 Q-08 |
 | status | IncidentStatus | 필수 | 진행/종료 |
-| current_stage | ResponseStage | 필수 | 화선 보고·정정 때 판정한 값. 사용자 입력 금지 |
-| alert_level | AlertLevel | 필수 | DB에 유지하되 규칙 엔진 사용 여부는 Q-03 |
+| current_stage | ResponseStage | 필수 | **예측할 때 판정**한 값(PRED-01 성공 시 그 제안서의 judged_stage로 갱신). 화선 보고·정정 때는 판정하지 않으며 첫 예측 전에는 INITIAL. 사용자 입력 금지 (v0.5) |
 | situation | Situation | 필수 | 현재 승인된 상황 |
 | reported_by / created_at | ID / DateTime | 필수 | 최초 등록 계정 / 등록시각 |
 | ended_at / ended_by | DateTime 또는 null / ID 또는 null | 필수·null 허용 | 종료 정보 |
@@ -475,7 +483,8 @@ DB의 영문 ENUM과 규칙 엔진의 한글 표시는 구분합니다. 예를 �
 | latest_prediction_id / latest_proposal_id | ID 또는 null | 필수·null 허용 | 성공한 최신 결과 참조, 아직 없으면 null |
 | needs_reprediction | boolean | 필수 | 최신 화선 버전 > 현재 예측 기준 화선 버전. 예측이 없으면 true |
 | proposal_stale | boolean | 필수 | 정정은 저장됐지만 현재 제안서가 이를 반영하지 못함 |
-| situation_revision | string | 필수 | 동시 수정 방지용 불투명 API 토큰 제안. DB 컬럼 추가 확정 아님 |
+| situation_revision | string | 필수 | 동시 수정 방지용 불투명 API 토큰 제안. DB 컬럼 추가 확정 아님. v0.5 서버는 `rev-{최신 정정 id}` 임시 값 — 상황 정정(COR-01) 결정 때 확정(확인 필요) |
+| running_operation_id | string 또는 null | 필수·null 허용 | 진행 중인 예측 작업 id(PRED-05로 조회). 없으면 null. 화면을 다시 열어도 진행 표시를 이어 감 (v0.5) |
 
 조회 참조들은 일관된 스냅샷으로 읽습니다. REPORTER에는 situation·예측·제안 참조 등 분석용 필드를 제외하고 보고 정보와 화선만 제공하는 안이며, 권한 범위는 Q-08에서 확정합니다.
 
@@ -502,7 +511,6 @@ DB의 영문 ENUM과 규칙 엔진의 한글 표시는 구분합니다. 예를 �
   "reporter_phone": "미상",
   "status": "IN_PROGRESS",
   "current_stage": "STAGE1",
-  "alert_level": "ATTENTION",
   "situation": {
     "villages": {
       "1024": {
@@ -535,7 +543,8 @@ DB의 영문 ENUM과 규칙 엔진의 한글 표시는 구분합니다. 예를 �
   "latest_proposal_id": "71",
   "needs_reprediction": false,
   "proposal_stale": false,
-  "situation_revision": "rev-example-1"
+  "situation_revision": "rev-example-1",
+  "running_operation_id": null
 }
 ```
 
@@ -646,11 +655,12 @@ predictions에는 성공 결과만 저장합니다. 진행·실패 상태는 Ope
 
 | 필드 | 타입 | 필수·null | 설명 |
 | --- | --- | --- | --- |
-| source | KMA_FORECAST / AWS_OBS | 필수 | 운영 예보 / 과거 시연 관측 |
+| source | KMA_FORECAST / AWS_OBS / FIXED | 필수 | 운영 예보 / 과거 시연 관측 / 시험 고정값(v0.5, 서버 설정 WEATHER=fixed) |
 | issued_at | DateTime 또는 null | 필수·null 허용 | 예보 발표시각. 관측은 null |
-| location | object | 필수 | 예보 {nx: integer, ny: integer}, 관측 {stn: string} |
+| location | object 또는 null | 필수·null 허용 | 예보 {nx: integer, ny: integer}, 관측 {stn: string}, 고정값은 null |
 | hours | WeatherHour[9] | 필수 | base_at을 내림한 정시부터 8시간 뒤까지, 1시간 간격 9개 |
 | hours[].at | DateTime | 필수 | 대상 정시 |
+| hours[].kind | string | 선택 | 「관측」·「예보」·「고정」·「파일」 — 0시는 관측, 뒤는 예보처럼 섞여 오므로 시간마다 표시. **한글 그대로** (v0.5) |
 | hours[].wind_dir / wind_speed | number | 필수 | 불어오는 방향 0~360° / m/s, 풍속 0 이상 |
 | hours[].temp / humidity / precip | number | 필수 | ℃ / 0~100% / 1시간 강수 mm, 강수 0 이상 |
 
@@ -668,6 +678,7 @@ predictions에는 성공 결과만 저장합니다. 진행·실패 상태는 Ope
   "hours": [
     {
       "at": "2025-03-22T11:00:00+09:00",
+      "kind": "관측",
       "wind_dir": 270,
       "wind_speed": 2.1,
       "temp": 21.8,
@@ -676,6 +687,7 @@ predictions에는 성공 결과만 저장합니다. 진행·실패 상태는 Ope
     },
     {
       "at": "2025-03-22T12:00:00+09:00",
+      "kind": "관측",
       "wind_dir": 270,
       "wind_speed": 2.1,
       "temp": 21.8,
@@ -684,6 +696,7 @@ predictions에는 성공 결과만 저장합니다. 진행·실패 상태는 Ope
     },
     {
       "at": "2025-03-22T13:00:00+09:00",
+      "kind": "관측",
       "wind_dir": 270,
       "wind_speed": 2.1,
       "temp": 21.8,
@@ -692,6 +705,7 @@ predictions에는 성공 결과만 저장합니다. 진행·실패 상태는 Ope
     },
     {
       "at": "2025-03-22T14:00:00+09:00",
+      "kind": "관측",
       "wind_dir": 270,
       "wind_speed": 2.1,
       "temp": 21.8,
@@ -700,6 +714,7 @@ predictions에는 성공 결과만 저장합니다. 진행·실패 상태는 Ope
     },
     {
       "at": "2025-03-22T15:00:00+09:00",
+      "kind": "관측",
       "wind_dir": 270,
       "wind_speed": 2.1,
       "temp": 21.8,
@@ -708,6 +723,7 @@ predictions에는 성공 결과만 저장합니다. 진행·실패 상태는 Ope
     },
     {
       "at": "2025-03-22T16:00:00+09:00",
+      "kind": "관측",
       "wind_dir": 270,
       "wind_speed": 2.1,
       "temp": 21.8,
@@ -716,6 +732,7 @@ predictions에는 성공 결과만 저장합니다. 진행·실패 상태는 Ope
     },
     {
       "at": "2025-03-22T17:00:00+09:00",
+      "kind": "관측",
       "wind_dir": 270,
       "wind_speed": 2.1,
       "temp": 21.8,
@@ -724,6 +741,7 @@ predictions에는 성공 결과만 저장합니다. 진행·실패 상태는 Ope
     },
     {
       "at": "2025-03-22T18:00:00+09:00",
+      "kind": "관측",
       "wind_dir": 270,
       "wind_speed": 2.1,
       "temp": 21.8,
@@ -732,6 +750,7 @@ predictions에는 성공 결과만 저장합니다. 진행·실패 상태는 Ope
     },
     {
       "at": "2025-03-22T19:00:00+09:00",
+      "kind": "관측",
       "wind_dir": 270,
       "wind_speed": 2.1,
       "temp": 21.8,
@@ -752,9 +771,9 @@ predictions에는 성공 결과만 저장합니다. 진행·실패 상태는 Ope
 | id | string | 필수 | 불투명 작업 ID |
 | kind | PREDICTION / PROPOSAL_REGENERATION | 필수 | 장시간 작업 종류 |
 | status | OperationStatus | 필수 | QUEUED / RUNNING / SUCCEEDED / FAILED |
-| stage | string 또는 null | 필수·null 허용 | SPREAD / RISK / RULES / EVIDENCE / PROPOSAL_GENERATION / COMMIT 등 API 제안 |
+| stage | string 또는 null | 필수·null 허용 | SPREAD / RISK / RULES / PROPOSAL_GENERATION / COMMIT. v0.5 서버는 EVIDENCE를 내지 않음(근거 검색이 PROPOSAL_GENERATION 안에서 같이 돎) |
 | result | object 또는 null | 필수·null 허용 | 성공 때 prediction_id·proposal_id 반환. 정정 관련 작업은 correction_id도 가능 |
-| error | object 또는 null | 필수·null 허용 | 실패 때 code·message. HTTP 오류와 같은 코드 체계 |
+| error | object 또는 null | 필수·null 허용 | 실패 때 code·message. HTTP 오류와 같은 코드 체계. v0.5 서버 코드: 커밋 직전 재검사 `STALE_PERIMETER`·`INCIDENT_ENDED`, 계산 실패 `PREDICTION_INVALID`(예측 결과 검사 실패)·`PROPOSAL_FAILED`(규칙·제안 단계)·`INTERNAL_ERROR` — **이름 확인 필요** |
 
 작업 큐·보존기간·재시작 후 복구는 Q-05에서 확정해야 합니다. 서버 구현 없이 메모리 작업만으로 운영 계약이 충족됐다고 보지 않습니다.
 
@@ -874,7 +893,7 @@ predictions에는 성공 결과만 저장합니다. 진행·실패 상태는 Ope
 | village_id | ID 또는 null | 필수·null 허용 | 관할 밖 시설은 null 가능 |
 | sigungu_id | ID | 필수 | 시설 소속 시군구 |
 | geometry | Geometry | 필수 | 현재 적재는 점, 면도 허용 |
-| attrs | object | 필수 | 종류별 속성. SHELTER: designated·used_2025·area_m2·evac_area_2025·tier, VULNERABLE: occupancy·daytime_only·emergency, HOSPITAL: emergency, FIRE_STATION: center |
+| attrs | object | 필수 | 종류별 속성. SHELTER: designated·used_2025·area_m2·evac_area_2025·tier(`village` 마을 시설=먼저 모일 곳 · `hub` 거점 시설=머물 곳 · null 후보 아님, v0.5), VULNERABLE: occupancy·daytime_only·emergency, HOSPITAL: emergency, FIRE_STATION: center |
 
 시설 위치로 지도에 그리며, 응급 이송처는 attrs.emergency=true인 시설을 조회합니다. 대피소 정원은 실시간 남은 자리와 다릅니다.
 
@@ -901,7 +920,7 @@ predictions에는 성공 결과만 저장합니다. 진행·실패 상태는 Ope
   },
   "attrs": {
     "designated": true,
-    "tier": "거점 시설"
+    "tier": "hub"
   }
 }
 ```
@@ -919,7 +938,7 @@ predictions에는 성공 결과만 저장합니다. 진행·실패 상태는 Ope
 | geometry | Geometry | 필수 | 점·선·면 |
 | attrs | object | 필수 | road: highway·ref, power_line: voltage(V), substation: type·source, water: type·area_ha, house: use·code |
 
-동적으로 만든 도로·송전선 구간명은 제안 facts에서 표시합니다. DB 원본 name을 임의로 바꾸지 않습니다.
+동적으로 만든 도로·송전선 구간명은 제안 항목의 본문(sections의 목록 줄)에서 표시합니다(v0.5). DB 원본 name을 임의로 바꾸지 않습니다.
 
 **DTO Example**
 
@@ -948,52 +967,401 @@ predictions에는 성공 결과만 저장합니다. 진행·실패 상태는 Ope
 }
 ```
 
-<a id="dto-ruledetail"></a>
+<a id="dto-evidence"></a>
 
-### RuleDetail
+### Evidence
 
+> v0.5 새 DTO. v0.4의 CitationRef + EVD-01 원문을 대신합니다.
 
 | 필드 | 타입 | 필수·null | 설명 |
 | --- | --- | --- | --- |
-| status | string | 선택 | 규칙 엔진 항목별 상황 코드. 공통 ENUM 아님 |
-| finding | string | 필수 | 규칙 판정 한 줄 |
-| facts | object | 필수 | 항목별 구조는 7절. 수치·판정은 규칙 엔진 결과 |
-| targets | string[] | 필수 | 최신 규칙 문서 형식. village:ID / facility:ID / map_feature:ID / resource_base:ID / admin_area:ID 등 |
-| categories | string[] | 필수 | 엔진 원문 즉시·대기·협의·요청. 외부 ProposalItem.categories는 영문 ENUM으로 매핑 |
-| withheld | string[] | 필수 | 근거·자료가 없어 제공하지 못한 내용 |
-| rule_basis | string[] | 필수 | 규칙 근거 코드. 본문 공개·검색 여부는 EVD-01 정책에 따름 |
+| chunk_id | string | 필수 | 근거 청크 코드(예: SM-p073-s01). 문단의 evidence 목록과 같은 값 |
+| label | string 또는 null | 필수·null 허용 | 화면 표기(「p.73」, 「시행령 제21조①·②」). 원자료에 없으면 null |
+| doc_name | string 또는 null | 필수·null 허용 | 문서명. 원자료에 없으면 null |
+| section | string 또는 null | 필수·null 허용 | 절·조항 |
+| page | integer 또는 null | 필수·null 허용 | 쪽. 법령처럼 쪽이 없으면 null |
+| origin | string 또는 null | 필수·null 허용 | 「판정 근거」(규칙 엔진이 지정) · 「검색」(근거 검색으로 찾음). **한글 그대로**, 원자료에 없으면 null |
+| text | string 또는 null | 필수·null 허용 | 원문 전체. 제안서를 저장할 때의 스냅샷, 원자료에 없으면 null |
 
-DB의 옛 detail.targets 객체 예시보다 최신 규칙 엔진의 문자열 배열 형식을 우선하는 API 초안입니다. 이름을 넣은 admin_area:안평면, kind가 포함된 map_feature:power_line:3 예시가 혼재하므로 출력 전 서버 어댑터가 PK 기반으로 변환해야 합니다(Q-04). detail의 원문 facts·categories는 그대로 두고 외부 표시 필드와 구분합니다.
+항목이 실제로 인용한 원문만 항목과 함께 저장해 돌려줍니다(DB-설계 2.4, 11/9). 근거 자료가 나중에 바뀌어도 그때 본 원문이 남습니다. 원문 코퍼스 · 검색은 GPU 서버(RAG)에 있고 이 API로 노출하지 않습니다.
 
 **DTO Example**
 
 ```json
 {
-  "status": "maintain",
-  "finding": "현재 기준과 P5 기준 단계 유지",
-  "facts": {
-    "now": {
-      "stage": "1단계",
-      "area_ha": 8,
-      "wind_ms": 2.1,
-      "facility": 12
+  "chunk_id": "SM-p073-s01",
+  "label": "p.73",
+  "doc_name": "「산불 재난」 위기관리 표준매뉴얼",
+  "section": "대응단계 판단기준",
+  "page": 73,
+  "origin": "판정 근거",
+  "text": "(근거 원문 전체)"
+}
+```
+
+<a id="dto-proposalsection"></a>
+
+### ProposalSection
+
+> v0.5 새 DTO. 항목 카드의 본문 = 소제목(`title`) → 블록(`blocks[]`). 블록은 `type`마다 칸이 다릅니다.
+
+| 필드 | 타입 | 필수·null | 설명 |
+| --- | --- | --- | --- |
+| title | string | 필수 | 소제목(대부분 규칙 엔진이 정함, 버전마다 구성이 다를 수 있음) |
+| blocks[].type | string | 필수 | paragraph(제안 문단) · list(목록) · table(표) · note(※ 안내) · failed(실패 안내) |
+| paragraph: category | ItemCategory | 필수 | 문단 구분(저장값 한글을 영문 코드로) |
+| paragraph: body | string | 필수 | 본문 = 상황 문장 + 할 일 문장, 근거 표기 없음 |
+| paragraph: cite | string | 필수 | 근거 표기(「[p.73·91]」) |
+| paragraph: quote | string | 필수 | 근거 문장 — Evidence.text에서 칠할 부분 |
+| paragraph: evidence | string[] | 필수 | 인용한 Evidence.chunk_id 목록 |
+| paragraph: text / situation / action_text | string | 선택 | 본문 + 표기 / 판정 상황 문장(규칙) / 할 일 문장(LLM) — 상황은 회색 · 할 일은 굵게처럼 꾸밀 때 |
+| paragraph: topic / source | string 또는 null / string | 선택 | 다룬 주제 / `rule+llm`(상황 문장 있음) · `llm` |
+| list: style / rows[].text | string / string | 필수 | `bullet` · `numbered` / 한 줄 글, `**굵게**` 표기 포함 |
+| table: head / rows | string[] / string[][] | 필수 | 열 이름 / 행마다 열 순서 배열 |
+| note · failed: text | string | 필수 | ※ 안내 / 「검사를 통과한 제안이 없어 이 항목의 제안은 표시하지 않았습니다」 |
+
+**DTO Example**
+
+```json
+{
+  "title": "1. 진화 우선순위",
+  "blocks": [
+    {
+      "type": "list",
+      "style": "numbered",
+      "rows": [
+        {
+          "text": "① **인명**: 지금(이미 닿음) 안평면 괴산리·신월리"
+        }
+      ]
     },
-    "p5": {
-      "stage": "1단계",
-      "area_ha": 9,
-      "wind_ms": 2.6,
-      "facility": 12
+    {
+      "type": "note",
+      "text": "※ 군사시설과 중요 산림자원은 위치 정보가 없어 반영하지 않았습니다."
     }
-  },
-  "targets": [],
+  ]
+}
+```
+
+<a id="dto-proposalitem"></a>
+
+### ProposalItem
+
+> v0.5에서 다시 정함. v0.4의 `id` · `text` · `detail`(RuleDetail) · `citations`는 뺐습니다.
+
+| 필드 | 타입 | 필수·null | 설명 |
+| --- | --- | --- | --- |
+| item_code | string | 필수 | S1~S6 · E1~E6 (12개, 아래 표) |
+| name | string | 필수 | 항목 이름 |
+| axis | ItemAxis | 필수 | 진화/대피 |
+| state | ProposalItemState | 필수 | 생성 · 일부 생성 · 실패 · 재사용 · 해당 없음 |
+| categories | ItemCategory[] | 필수 | 문단 구분을 중복 없이 즉시→대기→협의→요청 순서로. 실패 · 해당 없음이면 [] |
+| finding | string | 필수 | 판정 한 줄(규칙 엔진). S1의 값이 격상 대비 안내 내용. 해당 없음이면 "" |
+| withheld | {field, reason}[] 또는 null | 선택·null 허용 | 엔진이 판단하지 않은 것(자료 · 기준 없음). 서버 기본값 null도 처리 |
+| change_type | ChangeType 또는 null | 필수·null 허용 | 바로 앞 버전의 같은 항목과 비교한 값(아래 「변경」 판단). 첫 버전 · 해당 없음이면 null |
+| sections | ProposalSection[] | 필수 | 카드 본문 |
+| evidence | Evidence[] | 필수 | 이 항목이 인용한 근거 원문 |
+
+제안서는 **늘 12칸**(S1→S6, E1→E6)입니다. 발동하지 않은 항목도 칸이 있고 `state: NOT_TRIGGERED`, 나머지는 빈 값입니다. 미발동을 안전하다는 의미로 해석하지 않습니다. 규칙 판정의 facts · targets · status는 응답에 넣지 않습니다(지도 강조는 MVP 제외).
+
+| 진화 | 이름 | 대피 | 이름 |
+| --- | --- | --- | --- |
+| S1 | 대응단계 판단·격상 검토·지휘권 인계 | E1 | 위험구역 설정 |
+| S2 | 진화 우선지역·보호대상·시설 보호 | E2 | 대피 대상·순서·시점 |
+| S3 | 진화자원 현황·동원 범위 | E3 | 취약시설 조치 |
+| S4 | 진화 방식·시간대 전략 | E4 | 대피소 지정 및 관련 통제 |
+| S5 | 진화인력 안전·투입 관리 | E5 | 재난문자·방송 전파 |
+| S6 | 유관기관 동원·협조 요청 | E6 | 유관기관 요청 |
+
+**「변경」 판단** — PROP-01 `changed_count`, PROP-02·03 `change_type`, PROP-04가 같은 규칙을 씁니다.
+
+- 변경(CHANGED): 같은 항목 코드끼리 판정 한 줄 · 구분 · 다룬 주제(topic) 집합 · 목록/표/※ 줄 · 문단 상황 문장 중 하나라도 다름. 「직전 …」처럼 직전 버전을 가리키는 표기는 지우고 비교
+- LLM 할 일 문장(action_text)만 다르면 변경이 아님 → SAME(PROP-04에서는 wording_only)
+- NEW · REMOVED: 앞 버전에 없던 항목 / 이번에 해당 없음이 된 항목
+
+**DTO Example**
+
+```json
+{
+  "item_code": "S1",
+  "name": "대응단계 판단·격상 검토·지휘권 인계",
+  "axis": "SUPPRESSION",
+  "state": "GENERATED",
   "categories": [
-    "대기"
+    "STANDBY",
+    "CONSULT"
   ],
+  "finding": "현재 기준 1단계(피해면적 48.5 ha · 평균풍속 3.4 m/s · 시설피해 우려 최소 2동) · P5 기준 2단계(피해면적 363 ha) → 5시간 안에 2단계 기준 도달 예상 · 지휘권자 의성군수 → 경상북도지사",
   "withheld": [
-    "진화예상시간: MVP 제외"
+    {
+      "field": "진화예상시간",
+      "reason": "MVP에서 제외"
+    }
   ],
-  "rule_basis": [
-    "SM-p073"
+  "change_type": "CHANGED",
+  "sections": [
+    {
+      "title": "1. 대응단계 판단·격상 검토",
+      "blocks": [
+        {
+          "type": "paragraph",
+          "category": "CONSULT",
+          "body": "피해면적 48.5 ha, 평균풍속 3.4 m/s, 시설피해 우려 최소 2동으로 세 기준 모두 확산대응 1단계에 해당합니다. 확산대응 1단계 발령을 산림청장과 협의하십시오.",
+          "cite": "[p.73·91]",
+          "quote": "산림청장은 대응단계 판단기준에 따라 산불현장 통합지휘본부와 협의하여 대응단계를 발령한다",
+          "evidence": [
+            "SM-p073-s01",
+            "SM-p091-s02"
+          ],
+          "text": "피해면적 48.5 ha, … 확산대응 1단계 발령을 산림청장과 협의하십시오 [p.73·91].",
+          "situation": "피해면적 48.5 ha, 평균풍속 3.4 m/s, 시설피해 우려 최소 2동으로 세 기준 모두 확산대응 1단계에 해당합니다.",
+          "action_text": "확산대응 1단계 발령을 산림청장과 협의하십시오.",
+          "topic": "현재 기준 단계",
+          "source": "rule+llm"
+        }
+      ]
+    }
+  ],
+  "evidence": [
+    {
+      "chunk_id": "SM-p073-s01",
+      "label": "p.73",
+      "doc_name": "「산불 재난」 위기관리 표준매뉴얼",
+      "section": "대응단계 판단기준",
+      "page": 73,
+      "origin": "판정 근거",
+      "text": "(근거 원문 전체)"
+    }
+  ]
+}
+```
+
+<a id="dto-proposal"></a>
+
+### Proposal
+
+> v0.5에서 다시 정함. v0.4의 incident_id · perimeter_version · seq · correction_id · proposal_stale는 뺐습니다(버전 문자열 · 산불 상세에 있음).
+
+| 필드 | 타입 | 필수·null | 설명 |
+| --- | --- | --- | --- |
+| id | ID | 필수 | 제안서 |
+| version | string | 필수 | 표시용 v{기준 화선 버전}.{같은 화선 내 순번} |
+| trigger | PREDICTION / CORRECTION | 필수 | 생성 계기 |
+| created_at | DateTime | 필수 | 생성시각 |
+| base_at | DateTime | 필수 | 예측 기준 시각(기준 화선 관측 시각 = P0). 「예측 기준 12:50 · 28분 전」 표시용 |
+| prediction_id | ID | 필수 | 이 제안서가 쓴 예측. PRED-02·03·04 · RISK-01을 같은 번호로 부름 |
+| judged_stage / predicted_stage | ResponseStage | 필수 | 이 예측으로 판정한 현재 기준 / P5 · 0~5h 평균풍속 기준 |
+| items | ProposalItem[12] | 필수 | 늘 12칸, S1→S6 · E1→E6 |
+
+official_stage는 두지 않습니다. 예측 단계가 현재 판정보다 높으면 격상 대비 안내이며 공식 발령으로 표시하지 않습니다. 아래 items 예시는 형식 설명용 2칸입니다.
+
+**DTO Example**
+
+```json
+{
+  "id": "71",
+  "version": "v1.2",
+  "trigger": "PREDICTION",
+  "created_at": "2025-03-22T12:53:00+09:00",
+  "base_at": "2025-03-22T12:50:00+09:00",
+  "prediction_id": "41",
+  "judged_stage": "STAGE1",
+  "predicted_stage": "STAGE2",
+  "items": [
+    {
+      "item_code": "S1",
+      "name": "대응단계 판단·격상 검토·지휘권 인계",
+      "axis": "SUPPRESSION",
+      "state": "GENERATED",
+      "categories": [
+        "STANDBY",
+        "CONSULT"
+      ],
+      "finding": "현재 기준 1단계(피해면적 48.5 ha · 평균풍속 3.4 m/s · 시설피해 우려 최소 2동) · P5 기준 2단계(피해면적 363 ha) → 5시간 안에 2단계 기준 도달 예상 · 지휘권자 의성군수 → 경상북도지사",
+      "withheld": [
+        {
+          "field": "진화예상시간",
+          "reason": "MVP에서 제외"
+        }
+      ],
+      "change_type": "CHANGED",
+      "sections": [
+        {
+          "title": "1. 대응단계 판단·격상 검토",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "category": "CONSULT",
+              "body": "피해면적 48.5 ha, 평균풍속 3.4 m/s, 시설피해 우려 최소 2동으로 세 기준 모두 확산대응 1단계에 해당합니다. 확산대응 1단계 발령을 산림청장과 협의하십시오.",
+              "cite": "[p.73·91]",
+              "quote": "산림청장은 대응단계 판단기준에 따라 산불현장 통합지휘본부와 협의하여 대응단계를 발령한다",
+              "evidence": [
+                "SM-p073-s01",
+                "SM-p091-s02"
+              ],
+              "text": "피해면적 48.5 ha, … 확산대응 1단계 발령을 산림청장과 협의하십시오 [p.73·91].",
+              "situation": "피해면적 48.5 ha, 평균풍속 3.4 m/s, 시설피해 우려 최소 2동으로 세 기준 모두 확산대응 1단계에 해당합니다.",
+              "action_text": "확산대응 1단계 발령을 산림청장과 협의하십시오.",
+              "topic": "현재 기준 단계",
+              "source": "rule+llm"
+            }
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "chunk_id": "SM-p073-s01",
+          "label": "p.73",
+          "doc_name": "「산불 재난」 위기관리 표준매뉴얼",
+          "section": "대응단계 판단기준",
+          "page": 73,
+          "origin": "판정 근거",
+          "text": "(근거 원문 전체)"
+        }
+      ]
+    },
+    {
+      "item_code": "E3",
+      "name": "취약시설 조치",
+      "axis": "EVACUATION",
+      "state": "NOT_TRIGGERED",
+      "categories": [],
+      "finding": "",
+      "withheld": [],
+      "change_type": null,
+      "sections": [],
+      "evidence": []
+    }
+  ]
+}
+```
+
+<a id="dto-proposalversion"></a>
+
+### ProposalVersion
+
+> v0.5 새 DTO. PROP-01 버전 목록의 한 줄.
+
+| 필드 | 타입 | 필수·null | 설명 |
+| --- | --- | --- | --- |
+| id | ID | 필수 | 제안서(PROP-03 · 04에 씀) |
+| version / trigger / created_at | string / PREDICTION · CORRECTION / DateTime | 필수 | Proposal과 같음 |
+| judged_stage / predicted_stage | ResponseStage | 필수 | Proposal과 같음 |
+| category_counts | object | 필수 | {IMMEDIATE, STANDBY, CONSULT, REQUEST: integer} 구분별 항목 수(한 항목이 여러 구분이면 각각 셈) |
+| changed_count | integer 또는 null | 필수·null 허용 | 바로 앞 버전 대비 바뀐 항목 수(「변경」 판단), 첫 버전은 null |
+
+**DTO Example**
+
+```json
+{
+  "id": "71",
+  "version": "v1.2",
+  "trigger": "PREDICTION",
+  "created_at": "2025-03-22T12:53:00+09:00",
+  "judged_stage": "STAGE1",
+  "predicted_stage": "STAGE2",
+  "category_counts": {
+    "IMMEDIATE": 9,
+    "STANDBY": 2,
+    "CONSULT": 2,
+    "REQUEST": 3
+  },
+  "changed_count": 2
+}
+```
+
+<a id="dto-proposaldiff"></a>
+
+### ProposalDiff
+
+> v0.5 새 DTO. PROP-04 직전 버전 비교 — 바뀐 항목, 그 안에서도 바뀐 부분만.
+
+| 필드 | 타입 | 필수·null | 설명 |
+| --- | --- | --- | --- |
+| version / previous_version | string / string 또는 null | 필수 | 이 버전 / 바로 앞 버전. 첫 버전이면 null |
+| trigger / created_at | PREDICTION · CORRECTION / DateTime | 필수 | 이 버전 |
+| cause | string 또는 null | 필수·null 허용 | 왜 바뀌었나: 「상황 정정: {입력}」 · 「새 화선(v2, 관측 15:00) 보고로 다시 예측」 · 「같은 화선에서 다시 예측(예측 기준 15:00)」. 첫 버전 null |
+| counts | {changed, wording_only, same} 또는 null | 필수·null 허용 | 바뀐 항목 · 표현만 바뀐 항목 · 같은 항목 수. changed = PROP-01 changed_count |
+| items[] | object[] | 필수 | 바뀐 항목만(S1→E6). 첫 버전이면 [] |
+| items[].item_code / name | string | 필수 | |
+| items[].change | DiffItemChange | 필수 | 변경 · 신규 · 빠짐 |
+| items[].categories | {before, after} | 필수 | ItemCategory[]. 신규면 before null, 빠짐이면 after null |
+| items[].finding | {before, after} 또는 null | 필수·null 허용 | 판정 한 줄. 같으면 null |
+| items[].proposals[] | object[] | 필수 | 바뀐 제안 문단만: change(DiffProposalChange) · topic · before{category, body} · after{category, body}(없는 쪽은 null). 주제가 같은 문단끼리 짝 |
+| items[].rows | {added, removed} | 필수 | 목록 · 표 · ※ 줄의 + / − (string[]) |
+| items[].note | string 또는 null | 필수·null 허용 | 이번 버전에서 실패했으면 그 안내 |
+| wording_only_items / same_items | string[] | 필수 | 표현만 바뀐 · 같은 항목 코드 |
+
+바뀐 낱말 칠하기는 하지 않고 이전 · 이후 문장을 통째로 줍니다(LLM이 표현을 바꾸면 칠하기가 소음).
+
+**DTO Example**
+
+```json
+{
+  "version": "v2.2",
+  "previous_version": "v2.1",
+  "trigger": "CORRECTION",
+  "created_at": "2025-03-22T15:40:05+09:00",
+  "cause": "상황 정정: 박곡리 대피 완료, 헬기 6대 투입",
+  "counts": {
+    "changed": 3,
+    "wording_only": 2,
+    "same": 7
+  },
+  "items": [
+    {
+      "item_code": "S3",
+      "name": "진화자원 현황·동원 범위",
+      "change": "CHANGED",
+      "categories": {
+        "before": [
+          "IMMEDIATE",
+          "STANDBY",
+          "REQUEST"
+        ],
+        "after": [
+          "IMMEDIATE",
+          "STANDBY",
+          "REQUEST"
+        ]
+      },
+      "finding": {
+        "before": "투입: 헬기 23 · 장비 26 · 인력 151 / 현재 1단계 → 5시간 뒤 2단계",
+        "after": "투입: 헬기 29 · 장비 26 · 인력 151 / 현재 1단계 → 5시간 뒤 2단계"
+      },
+      "proposals": [
+        {
+          "change": "MODIFIED",
+          "topic": "투입 자원",
+          "before": {
+            "category": "IMMEDIATE",
+            "body": "현재 헬기 23대(산림청 5, 지자체 16, 소방 2)가 투입되어 있습니다. 가용 헬기를 집중 투입하십시오."
+          },
+          "after": {
+            "category": "IMMEDIATE",
+            "body": "현재 헬기 29대(산림청 9, 지자체 16, 소방 4)가 투입되어 있습니다. 가용 헬기를 집중 투입하십시오."
+          }
+        }
+      ],
+      "rows": {
+        "added": [],
+        "removed": []
+      },
+      "note": null
+    }
+  ],
+  "wording_only_items": [
+    "S1",
+    "E5"
+  ],
+  "same_items": [
+    "S4",
+    "S5",
+    "S6",
+    "E1",
+    "E3",
+    "E4",
+    "E6"
   ]
 }
 ```
@@ -1002,6 +1370,7 @@ DB의 옛 detail.targets 객체 예시보다 최신 규칙 엔진의 문자열 �
 
 ### CitationRef
 
+> **v0.5: 제안서는 이 DTO를 쓰지 않습니다(Evidence로 바뀜).** AI-01(QaMessage)이 아직 정리 전이라 남겨 둡니다. DB에 citations · evidence_chunks 테이블을 두지 않기로 해서(DB-설계 11/9), AI-01을 정리할 때 Evidence 모양으로 바꿀 예정입니다(확인 필요).
 
 | 필드 | 타입 | 필수·null | 설명 |
 | --- | --- | --- | --- |
@@ -1026,167 +1395,6 @@ DB의 옛 detail.targets 객체 예시보다 최신 규칙 엔진의 문자열 �
 }
 ```
 
-<a id="dto-proposalitem"></a>
-
-### ProposalItem
-
-
-| 필드 | 타입 | 필수·null | 설명 |
-| --- | --- | --- | --- |
-| id | ID | 필수 | proposal_items PK |
-| item_code | string | 필수 | 현재 S1~S7·E1~E7. DB 문자열이며 폐기 항목 이름도 코드 상수에 보존 |
-| axis | ItemAxis | 필수 | 진화/대피 |
-| categories | ItemCategory[] | 필수 | 1개 이상, 중복 없이 |
-| text | string | 필수 | LLM 문장. 인용 번호는 citations.k와 대응 |
-| detail | RuleDetail | 필수 | 판정 이유·수치·지도 대상·미제공 사유 |
-| citations | CitationRef[] | 필수 | 이 문장에 연결된 근거 |
-| change_type | ADDED / CHANGED / UNCHANGED | 필수 | 직전 제안과 item_code별 categories·text 비교한 표시용 값 |
-
-발동하지 않거나 근거를 못 찾은 항목은 행을 만들지 않습니다. 미발동을 안전하다는 의미로 해석하지 않습니다. 근거 부족은 이벤트 로그로 별도 안내합니다.
-
-**DTO Example**
-
-```json
-{
-  "id": "72",
-  "item_code": "S1",
-  "axis": "SUPPRESSION",
-  "categories": [
-    "STANDBY"
-  ],
-  "text": "현재 단계 기준을 유지합니다 [1].",
-  "detail": {
-    "status": "maintain",
-    "finding": "현재 기준과 P5 기준 단계 유지",
-    "facts": {
-      "now": {
-        "stage": "1단계",
-        "area_ha": 8,
-        "wind_ms": 2.1,
-        "facility": 12
-      },
-      "p5": {
-        "stage": "1단계",
-        "area_ha": 9,
-        "wind_ms": 2.6,
-        "facility": 12
-      }
-    },
-    "targets": [],
-    "categories": [
-      "대기"
-    ],
-    "withheld": [
-      "진화예상시간: MVP 제외"
-    ],
-    "rule_basis": [
-      "SM-p073"
-    ]
-  },
-  "citations": [
-    {
-      "id": "81",
-      "k": 1,
-      "chunk_id": "91",
-      "chunk_code": "SM-p073-01",
-      "doc_name": "시연 근거 문서",
-      "page": 73,
-      "section": "대응단계 판단기준"
-    }
-  ],
-  "change_type": "UNCHANGED"
-}
-```
-
-<a id="dto-proposal"></a>
-
-### Proposal
-
-
-| 필드 | 타입 | 필수·null | 설명 |
-| --- | --- | --- | --- |
-| id / incident_id / prediction_id | ID | 필수 | 제안서 / 산불 / 기준 예측 |
-| perimeter_version / seq | integer | 필수 | 기준 화선 버전 0 이상 / 같은 화선 내 순번 1 이상 |
-| version | string | 필수 | 표시용 v{perimeter_version}.{seq} |
-| trigger | PREDICTION / CORRECTION | 필수 | 생성 계기 |
-| correction_id | ID 또는 null | 필수·null 허용 | 정정으로 만든 제안만 값 있음 |
-| judged_stage / predicted_stage | ResponseStage | 필수 | 생성 당시 current_stage 복사 / P5·0~5h 평균풍속 기준 판정 |
-| created_at | DateTime | 필수 | 생성시각 |
-| proposal_stale | boolean | 필수 | 현재 사건 상황과 이 버전이 불일치하는지 표시 |
-| items | ProposalItem[] | 필수 | 발동하고 근거가 확보된 항목만, 최대 14개 |
-
-official_stage는 두지 않습니다. 예측 단계가 현재 판정보다 높으면 격상 대비 안내이며 공식 발령으로 표시하지 않습니다. items 예시는 형식 설명용 일부 항목입니다.
-
-**DTO Example**
-
-```json
-{
-  "id": "71",
-  "incident_id": "100",
-  "prediction_id": "41",
-  "perimeter_version": 1,
-  "seq": 1,
-  "version": "v1.1",
-  "trigger": "PREDICTION",
-  "correction_id": null,
-  "judged_stage": "STAGE1",
-  "predicted_stage": "STAGE1",
-  "created_at": "2025-03-22T12:05:00+09:00",
-  "proposal_stale": false,
-  "items": [
-    {
-      "id": "72",
-      "item_code": "S1",
-      "axis": "SUPPRESSION",
-      "categories": [
-        "STANDBY"
-      ],
-      "text": "현재 단계 기준을 유지합니다 [1].",
-      "detail": {
-        "status": "maintain",
-        "finding": "현재 기준과 P5 기준 단계 유지",
-        "facts": {
-          "now": {
-            "stage": "1단계",
-            "area_ha": 8,
-            "wind_ms": 2.1,
-            "facility": 12
-          },
-          "p5": {
-            "stage": "1단계",
-            "area_ha": 9,
-            "wind_ms": 2.6,
-            "facility": 12
-          }
-        },
-        "targets": [],
-        "categories": [
-          "대기"
-        ],
-        "withheld": [
-          "진화예상시간: MVP 제외"
-        ],
-        "rule_basis": [
-          "SM-p073"
-        ]
-      },
-      "citations": [
-        {
-          "id": "81",
-          "k": 1,
-          "chunk_id": "91",
-          "chunk_code": "SM-p073-01",
-          "doc_name": "시연 근거 문서",
-          "page": 73,
-          "section": "대응단계 판단기준"
-        }
-      ],
-      "change_type": "UNCHANGED"
-    }
-  ]
-}
-```
-
 <a id="dto-correctionchange"></a>
 
 ### CorrectionChange
@@ -1196,8 +1404,8 @@ official_stage는 두지 않습니다. 예측 단계가 현재 판정보다 높�
 | --- | --- | --- | --- |
 | target | village / deployed / incident / situation | 필수 | API 제안 구분 |
 | target_id | ID | village일 때 필수 | villages.id, 다른 target은 생략 |
-| item | string | 필수 | village: evacuated·evac_order, deployed: helicopter.total 등 Situation의 허용 경로, incident: alert_level, situation: disaster_sms_sent |
-| before / after | boolean 또는 integer 또는 AlertLevel | 필수 | 허용 항목과 동일 타입. 서버 현재값과 before 대조 |
+| item | string | 필수 | village: evacuated·evac_order, deployed: helicopter.total 등 Situation의 허용 경로, situation: disaster_sms_sent (위기경보 정정 항목은 v0.5에서 삭제) |
+| before / after | boolean 또는 integer | 필수 | 허용 항목과 동일 타입. 서버 현재값과 before 대조 |
 
 current_stage·official_stage·기상·진화예상시간·부상·고립·자원 개별 상태는 정정 허용 목록에 없습니다.
 
@@ -1298,6 +1506,8 @@ current_stage·official_stage·기상·진화예상시간·부상·고립·자�
 | created_at | DateTime | 필수 | 저장시각 |
 
 질문·답변 1건이 1행입니다. 이전 질문을 자동 문맥으로 이어 받지 않습니다. 상황은 변경하지 않습니다.
+
+> v0.5: AI-01은 정리 전입니다(v0.4 그대로 둠). 답변 근거(citations)는 제안서처럼 Evidence[] 모양으로 바뀔 예정입니다(확인 필요).
 
 **DTO Example**
 
@@ -1460,7 +1670,7 @@ current_stage·official_stage·기상·진화예상시간·부상·고립·자�
 
 ## 5. API 전체 목록
 
-총 **46개**입니다. 기존 42개 API의 기능 구분을 유지하고, 최신 DB에 정의된 기지 관리 `BASE-01~04` 4개를 추가했습니다. **모든 경로·DTO는 백엔드와 검토할 API 설계 초안**이며 RISK-01은 저장·계산 합의가 필요한 조건부 API입니다.
+총 **46개**입니다. 기존 42개 API의 기능 구분을 유지하고, 최신 DB에 정의된 기지 관리 `BASE-01~04` 4개를 추가했습니다. **v0.5**: EVD-01(근거 원문은 PROP-02 응답 안으로) 삭제, WTH-01(지금 날씨) 추가로 개수는 그대로 46개입니다. **모든 경로·DTO는 백엔드와 검토할 API 설계 초안**이며 RISK-01은 저장·계산 합의가 필요한 조건부 API입니다.
 
 
 | API ID | 기능 | Method | Endpoint | 권한 |
@@ -1468,7 +1678,7 @@ current_stage·official_stage·기상·진화예상시간·부상·고립·자�
 | [AUTH-01](#auth-01) | 로그인 | POST | `/api/v1/auth/login` | 비로그인 |
 | [AUTH-02](#auth-02) | 내 계정·권한 조회 | GET | `/api/v1/auth/me` | COMMANDER, VIEWER, REPORTER, ADMIN |
 | [AUTH-03](#auth-03) | 로그아웃 기록 | POST | `/api/v1/auth/logout` | COMMANDER, VIEWER, REPORTER, ADMIN |
-| [INC-01](#inc-01) | 산불 목록 | GET | `/api/v1/incidents` | COMMANDER, VIEWER, REPORTER |
+| [INC-01](#inc-01) | 산불 목록 | GET | `/api/v1/incidents` | COMMANDER, VIEWER, REPORTER, ADMIN |
 | [INC-02](#inc-02) | 새 산불 보고 | POST | `/api/v1/incidents` | REPORTER |
 | [INC-03](#inc-03) | 산불 현황 상세 | GET | `/api/v1/incidents/{incident_id}` | COMMANDER, VIEWER, REPORTER |
 | [INC-04](#inc-04) | 산불 종료 | POST | `/api/v1/incidents/{incident_id}/end` | COMMANDER |
@@ -1481,6 +1691,7 @@ current_stage·official_stage·기상·진화예상시간·부상·고립·자�
 | [PRED-04](#pred-04) | 예측 사용 기상 | GET | `/api/v1/incidents/{incident_id}/predictions/{prediction_id}/weather` | COMMANDER, VIEWER |
 | [PRED-05](#pred-05) | 계산 작업 조회 | GET | `/api/v1/incidents/{incident_id}/operations/{operation_id}` | COMMANDER |
 | [RISK-01](#risk-01) | P5 위험도 조회 | GET | `/api/v1/incidents/{incident_id}/predictions/{prediction_id}/risk` | COMMANDER, VIEWER |
+| [WTH-01](#wth-01) | 지금 날씨 (v0.5 추가) | GET | `/api/v1/incidents/{incident_id}/weather/now` | COMMANDER, VIEWER |
 | [MAP-01](#map-01) | 지도 레이어 목록 | GET | `/api/v1/map/layers` | COMMANDER, VIEWER, REPORTER |
 | [MAP-02](#map-02) | 지도 레이어 도형 | GET | `/api/v1/map/layers/{layer_id}/features` | COMMANDER, VIEWER, REPORTER |
 | [MAP-03](#map-03) | 지도 대상 상세 | GET | `/api/v1/map/entities/{entity_type}/{entity_id}` | COMMANDER, VIEWER, REPORTER |
@@ -1499,7 +1710,6 @@ current_stage·official_stage·기상·진화예상시간·부상·고립·자�
 | [PROP-03](#prop-03) | 특정 버전 제안서 | GET | `/api/v1/incidents/{incident_id}/proposals/{proposal_id}` | COMMANDER |
 | [PROP-04](#prop-04) | 직전 버전 비교 | GET | `/api/v1/incidents/{incident_id}/proposals/{proposal_id}/diff` | COMMANDER |
 | [PROP-05](#prop-05) | 정정 미반영 제안 재생성 | POST | `/api/v1/incidents/{incident_id}/proposal-regenerations` | COMMANDER |
-| [EVD-01](#evd-01) | 인용 근거 본문 | GET | `/api/v1/citations/{citation_id}` | COMMANDER |
 | [AI-01](#ai-01) | 질의응답 또는 정정 확인안 | POST | `/api/v1/incidents/{incident_id}/assistant/messages` | COMMANDER |
 | [AI-02](#ai-02) | 질의응답 이력 | GET | `/api/v1/incidents/{incident_id}/assistant/messages` | COMMANDER |
 | [COR-01](#cor-01) | 확인한 상황 정정 저장 | POST | `/api/v1/incidents/{incident_id}/corrections` | COMMANDER |
@@ -1661,7 +1871,7 @@ login_id: string(1~50), password: 비어 있지 않은 string, role: UserRole; �
 | 항목 | 내용 |
 | --- | --- |
 | Method·URL | `GET /api/v1/incidents` |
-| 권한 | COMMANDER, VIEWER, REPORTER |
+| 권한 | COMMANDER, VIEWER, REPORTER, ADMIN |
 | 성공 상태 | 200 |
 | 근거 | [DB-설계.md · 2.2](https://github.com/wildfire-guard-capstone/wfg-docs/blob/43dc969703cdb65192e07e1341785ce38bca60c6/docs/설계/DB-설계.md) |
 
@@ -1708,7 +1918,7 @@ login_id: string(1~50), password: 비어 있지 않은 string, role: UserRole; �
 }
 ```
 
-**처리 규칙:** users의 관할 시군구 내 산불만, reported_at DESC, id DESC로 조회합니다. 페이지 이동 중 변동 시 중복을 id로 제거합니다.
+**처리 규칙:** users의 관할 시군구 내 산불만, reported_at DESC, id DESC로 조회합니다. ADMIN은 관할이 없어 전체 지역을 봅니다(자원을 「투입」으로 바꿀 때 진행 중 산불 선택, v0.5). 페이지 이동 중 변동 시 중복을 id로 제거합니다.
 
 **주요 오류:** 공통 401·403·404·422·500 오류를 적용합니다.
 
@@ -1724,7 +1934,7 @@ login_id: string(1~50), password: 비어 있지 않은 string, role: UserRole; �
 | 성공 상태 | 201 |
 | 근거 | [DB-설계.md · 2.2](https://github.com/wildfire-guard-capstone/wfg-docs/blob/43dc969703cdb65192e07e1341785ce38bca60c6/docs/설계/DB-설계.md) |
 
-**추가 Header:** `Idempotency-Key` 필수.
+**추가 Header:** `Idempotency-Key` 필수 제안. v0.5 서버는 키 없이도 받습니다(이때 중복을 막지 않음) — 처리 규칙은 2.4절.
 
 **Path parameter:** 없음
 
@@ -1734,7 +1944,7 @@ login_id: string(1~50), password: 비어 있지 않은 string, role: UserRole; �
 
 **Request Body**
 
-ignition_point: Point, address: string(1~200), reported_at: DateTime, reporter_name: string(1~50), reporter_phone: string(1~20), alert_level: AlertLevel은 필수. started_at·report_text·reporter_org는 생략/null 허용. initial_perimeter: {geometry: MultiPolygon, observed_at: DateTime} 선택
+ignition_point: Point, address: string(1~200), reported_at: DateTime, reporter_name: string(1~50), reporter_phone: string(1~20)은 필수(v0.5: alert_level 삭제 — 보내면 422 VALIDATION_ERROR). started_at·report_text·reporter_org는 생략/null 허용. initial_perimeter: {geometry: Polygon 또는 MultiPolygon(MultiPolygon으로 저장), observed_at: DateTime} 선택
 
 ```json
 {
@@ -1751,8 +1961,7 @@ ignition_point: Point, address: string(1~200), reported_at: DateTime, reporter_n
   "report_text": null,
   "reporter_org": null,
   "reporter_name": "미상",
-  "reporter_phone": "미상",
-  "alert_level": "ATTENTION"
+  "reporter_phone": "미상"
 }
 ```
 
@@ -1781,8 +1990,7 @@ ignition_point: Point, address: string(1~200), reported_at: DateTime, reporter_n
     "reporter_name": "미상",
     "reporter_phone": "미상",
     "status": "IN_PROGRESS",
-    "current_stage": "STAGE1",
-    "alert_level": "ATTENTION",
+    "current_stage": "INITIAL",
     "reported_by": "3",
     "created_at": "2025-03-22T11:25:00+09:00",
     "ended_at": null,
@@ -1796,9 +2004,9 @@ ignition_point: Point, address: string(1~200), reported_at: DateTime, reporter_n
 }
 ```
 
-**처리 규칙:** 발화점으로 읍면동·관할을 서버가 계산합니다. 산불과 화선 v0을 같은 트랜잭션에서 저장합니다. initial_perimeter가 있으면 v1도 함께 저장합니다. status·current_stage·reported_by·기관별 접수 배열은 입력받지 않습니다. current_stage 판정 입력이 부족한 경우 처리는 Q-02에서 확정합니다.
+**처리 규칙:** 발화점으로 읍면동·관할을 서버가 계산합니다. 산불과 화선 v0을 같은 트랜잭션에서 저장합니다. initial_perimeter가 있으면 v1도 함께 저장합니다. status·current_stage·reported_by·기관별 접수 배열은 입력받지 않습니다. **v0.5: 보고 때 대응단계를 판정하지 않습니다** — current_stage는 INITIAL로 시작하고 예측(PRED-01) 때 판정합니다. 같은 키 재전송 처리는 2.4절.
 
-**주요 오류:** 422 INVALID_GEOMETRY / OUTSIDE_JURISDICTION / STAGE_INPUT_UNAVAILABLE
+**주요 오류:** 409 IDEMPOTENCY_KEY_REUSED, 422 INVALID_GEOMETRY / OUTSIDE_JURISDICTION / VALIDATION_ERROR(alert_level 등 모르는 칸)
 
 <a id="inc-03"></a>
 
@@ -1848,7 +2056,6 @@ ignition_point: Point, address: string(1~200), reported_at: DateTime, reporter_n
     "reporter_phone": "미상",
     "status": "IN_PROGRESS",
     "current_stage": "STAGE1",
-    "alert_level": "ATTENTION",
     "situation": {
       "villages": {
         "1024": {
@@ -1881,7 +2088,8 @@ ignition_point: Point, address: string(1~200), reported_at: DateTime, reporter_n
     "latest_proposal_id": "71",
     "needs_reprediction": false,
     "proposal_stale": false,
-    "situation_revision": "rev-example-1"
+    "situation_revision": "rev-example-1",
+    "running_operation_id": null
   },
   "meta": {
     "request_id": "req-example"
@@ -1947,7 +2155,6 @@ expected_perimeter_id: ID 필수(현재 화선과 대조하는 API 제안)
     "reporter_phone": "미상",
     "status": "ENDED",
     "current_stage": "STAGE1",
-    "alert_level": "ATTENTION",
     "situation": {
       "villages": {
         "1024": {
@@ -1980,7 +2187,8 @@ expected_perimeter_id: ID 필수(현재 화선과 대조하는 API 제안)
     "latest_proposal_id": "71",
     "needs_reprediction": false,
     "proposal_stale": false,
-    "situation_revision": "rev-example-1"
+    "situation_revision": "rev-example-1",
+    "running_operation_id": null
   },
   "meta": {
     "request_id": "req-example"
@@ -1988,7 +2196,7 @@ expected_perimeter_id: ID 필수(현재 화선과 대조하는 API 제안)
 }
 ```
 
-**처리 규칙:** 종료 후 새 화선 보고·정정, 예측, 상황 정정, 제안 재생성을 막습니다. 저장 중인 예측 작업과 같은 산불별 잠금으로 순서를 보장하고 종료 전 대기 작업은 커밋 직전 재검사합니다. 종료 후 기존 제안 조회와 질문은 허용합니다.
+**처리 규칙:** 종료 후 새 화선 보고·정정, 예측, 상황 정정, 제안 재생성을 막습니다. 저장 중인 예측 작업과 같은 산불별 잠금으로 순서를 보장하고 종료 전 대기 작업은 커밋 직전 재검사합니다. 종료 후 기존 제안 조회와 질문은 허용합니다. **v0.5 결정**: 종료하면 그 산불에 투입된 자원(resources.deployed_incident_id)을 자동으로 풀어 줍니다(status AVAILABLE, 연결 null) — 서버 반영 예정.
 
 **주요 오류:** 409 INCIDENT_ENDED / RESOURCE_BUSY / STALE_PERIMETER
 
@@ -2096,7 +2304,7 @@ expected_perimeter_id: ID 필수(현재 화선과 대조하는 API 제안)
 
 **Request Body**
 
-geometry: MultiPolygon, observed_at: DateTime, expected_perimeter_id: ID 모두 필수
+geometry: Polygon 또는 MultiPolygon(MultiPolygon으로 저장), observed_at: DateTime, expected_perimeter_id: ID 모두 필수
 
 ```json
 {
@@ -2177,9 +2385,9 @@ geometry: MultiPolygon, observed_at: DateTime, expected_perimeter_id: ID 모두 
 }
 ```
 
-**처리 규칙:** 다음 version_no로 INSERT하고 같은 트랜잭션에서 current_stage를 다시 판정합니다. 예측은 자동 실행하지 않습니다. 구멍·자기 교차·빈 도형을 검증하며 새 실측 화선은 이전 예측 범위를 포함할 의무가 없습니다. 관측시각 역전 처리와 P5 미확보 판정은 Q-02에서 확정합니다.
+**처리 규칙:** 다음 version_no로 INSERT합니다. **v0.5: 대응단계는 판정하지 않습니다**(다음 예측 때 판정). 예측은 자동 실행하지 않습니다. 구멍·자기 교차·빈 도형을 검증하며 새 실측 화선은 이전 예측 범위를 포함할 의무가 없습니다. 관측 시각이 현재 화선보다 앞서거나 5분 넘게 미래면 v0.5 서버는 422 INVALID_OBSERVED_AT으로 거절합니다(확인 필요, Q-02).
 
-**주요 오류:** 409 INCIDENT_ENDED / STALE_PERIMETER, 422 INVALID_GEOMETRY / STAGE_INPUT_UNAVAILABLE
+**주요 오류:** 409 INCIDENT_ENDED / STALE_PERIMETER, 422 INVALID_GEOMETRY / INVALID_OBSERVED_AT(확인 필요)
 
 <a id="per-03"></a>
 
@@ -2203,7 +2411,7 @@ geometry: MultiPolygon, observed_at: DateTime, expected_perimeter_id: ID 모두 
 
 **Request Body**
 
-geometry: MultiPolygon, observed_at: DateTime 모두 필수
+geometry: Polygon 또는 MultiPolygon(MultiPolygon으로 저장), observed_at: DateTime 모두 필수
 
 ```json
 {
@@ -2283,9 +2491,9 @@ geometry: MultiPolygon, observed_at: DateTime 모두 필수
 }
 ```
 
-**처리 규칙:** URL의 perimeter_id가 현재 유효한 v1 이상이어야 합니다. 기존 행 corrected_at과 다음 번호 새 행·current_stage 갱신을 한 트랜잭션으로 처리합니다. v0 정정은 금지합니다. 과거 예측과 제안은 보존하고 이력에서 기준 화선 정정 여부를 표시합니다.
+**처리 규칙:** URL의 perimeter_id가 현재 유효한 v1 이상이어야 합니다. 기존 행 corrected_at과 다음 번호 새 행을 한 트랜잭션으로 처리합니다(v0.5: 대응단계는 다음 예측 때 판정). 정정한 화선의 관측 시각이 직전 화선보다 앞서면 422 INVALID_OBSERVED_AT(확인 필요). v0 정정은 금지합니다. 과거 예측과 제안은 보존하고 이력에서 기준 화선 정정 여부를 표시합니다.
 
-**주요 오류:** 409 INCIDENT_ENDED / STALE_PERIMETER, 422 V0_NOT_CORRECTABLE
+**주요 오류:** 409 INCIDENT_ENDED / STALE_PERIMETER, 422 V0_NOT_CORRECTABLE / INVALID_OBSERVED_AT(확인 필요)
 
 <a id="pred-01"></a>
 
@@ -2337,7 +2545,7 @@ expected_perimeter_id: ID 필수
 }
 ```
 
-**처리 규칙:** 최신 유효 화선만 대상으로 하며 과거 화선 지정 실행은 허용하지 않습니다. 서버가 기상 지점을 선택하고 base_at=observed_at으로 고정합니다. 예측→P1~P8→위험도→규칙→근거→제안 계산 후 최종 결과를 한 트랜잭션으로 저장합니다. 실패 시 직전 예측·제안이 유지됩니다. 계산 중 새 화선·정정 발생 시 오래된 결과를 최신으로 커밋하지 않도록 재검사합니다. 위험도 미산출을 전체 실패로 볼지는 Q-01, 작업 저장소는 Q-05에서 확정합니다.
+**처리 규칙:** 최신 유효 화선만 대상으로 하며 과거 화선 지정 실행은 허용하지 않습니다. 서버가 기상 지점을 선택하고 base_at=observed_at으로 고정합니다. **v0.5: 기상은 요청 때 먼저 받습니다**(서버 설정의 원천에서 9시간). 못 받으면 작업을 만들지 않고 503 WEATHER_UNAVAILABLE이며, 받은 기상은 예측에 넘기고 predictions.weather로 저장해 규칙·제안도 같은 값을 씁니다. 예측→P1~P8→위험도→규칙→근거→제안 계산 후 최종 결과를 한 트랜잭션으로 저장합니다. 실패 시 직전 예측·제안이 유지됩니다. 계산 중 새 화선·정정 발생 시 오래된 결과를 최신으로 커밋하지 않도록 재검사합니다. **v0.5 결정(Q-01 일부)**: 위험도를 못 구해도 예측·제안은 저장합니다(RISK-01만 data: null). 근거 검색은 제안 작성(PROPOSAL_GENERATION) 안에서 함께 합니다. 작업 저장소는 Q-05에서 확정합니다(v0.5 서버는 메모리).
 
 **주요 오류:** 409 INCIDENT_ENDED / PREDICTION_RUNNING / STALE_PERIMETER, 503 WEATHER_UNAVAILABLE
 
@@ -2547,6 +2755,7 @@ expected_perimeter_id: ID 필수
     "hours": [
       {
         "at": "2025-03-22T11:00:00+09:00",
+        "kind": "관측",
         "wind_dir": 270,
         "wind_speed": 2.1,
         "temp": 21.8,
@@ -2555,6 +2764,7 @@ expected_perimeter_id: ID 필수
       },
       {
         "at": "2025-03-22T12:00:00+09:00",
+        "kind": "관측",
         "wind_dir": 270,
         "wind_speed": 2.1,
         "temp": 21.8,
@@ -2563,6 +2773,7 @@ expected_perimeter_id: ID 필수
       },
       {
         "at": "2025-03-22T13:00:00+09:00",
+        "kind": "관측",
         "wind_dir": 270,
         "wind_speed": 2.1,
         "temp": 21.8,
@@ -2571,6 +2782,7 @@ expected_perimeter_id: ID 필수
       },
       {
         "at": "2025-03-22T14:00:00+09:00",
+        "kind": "관측",
         "wind_dir": 270,
         "wind_speed": 2.1,
         "temp": 21.8,
@@ -2579,6 +2791,7 @@ expected_perimeter_id: ID 필수
       },
       {
         "at": "2025-03-22T15:00:00+09:00",
+        "kind": "관측",
         "wind_dir": 270,
         "wind_speed": 2.1,
         "temp": 21.8,
@@ -2587,6 +2800,7 @@ expected_perimeter_id: ID 필수
       },
       {
         "at": "2025-03-22T16:00:00+09:00",
+        "kind": "관측",
         "wind_dir": 270,
         "wind_speed": 2.1,
         "temp": 21.8,
@@ -2595,6 +2809,7 @@ expected_perimeter_id: ID 필수
       },
       {
         "at": "2025-03-22T17:00:00+09:00",
+        "kind": "관측",
         "wind_dir": 270,
         "wind_speed": 2.1,
         "temp": 21.8,
@@ -2603,6 +2818,7 @@ expected_perimeter_id: ID 필수
       },
       {
         "at": "2025-03-22T18:00:00+09:00",
+        "kind": "관측",
         "wind_dir": 270,
         "wind_speed": 2.1,
         "temp": 21.8,
@@ -2611,6 +2827,7 @@ expected_perimeter_id: ID 필수
       },
       {
         "at": "2025-03-22T19:00:00+09:00",
+        "kind": "관측",
         "wind_dir": 270,
         "wind_speed": 2.1,
         "temp": 21.8,
@@ -2625,7 +2842,7 @@ expected_perimeter_id: ID 필수
 }
 ```
 
-**처리 규칙:** 현재 날씨를 새로 수신한 결과가 아니라 해당 예측에 저장된 스냅샷을 반환합니다.
+**처리 규칙:** 현재 날씨를 새로 수신한 결과가 아니라 해당 예측에 저장된 스냅샷을 반환합니다(지금 날씨는 WTH-01). v0.5: 시간마다 `kind`(관측·예보·고정·파일)가 있고, 서버 설정이 시험 고정값이면 source=FIXED · issued_at · location이 null입니다.
 
 **주요 오류:** 공통 401·403·404·422·500 오류를 적용합니다.
 
@@ -2671,7 +2888,7 @@ expected_perimeter_id: ID 필수
 }
 ```
 
-**처리 규칙:** 2초 간격 조회를 제안합니다. 완료는 SUCCEEDED/FAILED로 끝나며 HTTP 200 응답 안에서 작업 실패를 구분합니다. operation은 요청 사용자·산불에 결합하고 보존기간은 Q-05에서 확정합니다.
+**처리 규칙:** 2초 간격 조회를 제안합니다. 완료는 SUCCEEDED/FAILED로 끝나며 HTTP 200 응답 안에서 작업 실패를 구분합니다. operation은 요청 사용자·산불에 결합하고 보존기간은 Q-05에서 확정합니다. v0.5 서버의 FAILED error.code는 Operation DTO 참고(이름 확인 필요). 작업 기록이 서버 메모리라 서버를 다시 켜면 진행 중이던 작업도 404입니다(Q-05).
 
 **주요 오류:** 공통 401·403·404·422·500 오류를 적용합니다.
 
@@ -2730,6 +2947,57 @@ expected_perimeter_id: ID 필수
 **처리 규칙:** 계산 방식·저장소가 합의된 뒤 구현하는 조건부 API입니다. 미산출을 0 또는 안전 등급으로 채우지 않습니다. 종료된 산불의 조회 허용 여부는 Q-01에서 결정하며, 구현 전 임의로 차단/허용을 확정하지 않습니다.
 
 **주요 오류:** 409 RISK_POLICY_PENDING (종료 후 정책 미확정 시), 503 RISK_UNAVAILABLE (조회 기능 미구현 시)
+
+<a id="wth-01"></a>
+
+### WTH-01 · 지금 날씨
+
+> v0.5 새 API. 산불현황의 「기상」 칸. 예측에 쓴 기상(PRED-04)과 따로, 지금 관측 1개를 줍니다.
+
+| 항목 | 내용 |
+| --- | --- |
+| Method·URL | `GET /api/v1/incidents/{incident_id}/weather/now` |
+| 권한 | COMMANDER, VIEWER |
+| 성공 상태 | 200 |
+| 근거 | [DB-설계.md · 2.3 weather_hours](https://github.com/wildfire-guard-capstone/wfg-docs/blob/main/docs/설계/DB-설계.md) |
+
+**Path parameter:** `incident_id`: ID
+
+**Query parameter**
+
+없음.
+
+**Request Body**
+
+없음.
+
+**Response**
+
+`data`: {observed_at: DateTime, source: string, wind_dir: number 또는 null, wind_dir_name: string 또는 null, wind_speed / temp / humidity / precip: number 또는 null, next_refresh_at: DateTime 또는 null, stale: boolean}
+
+```json
+{
+  "data": {
+    "observed_at": "2025-03-22T14:00:00+09:00",
+    "source": "KMA_NCST",
+    "wind_dir": 135.0,
+    "wind_dir_name": "남동",
+    "wind_speed": 3.4,
+    "temp": 18.2,
+    "humidity": 35.0,
+    "precip": 0.0,
+    "next_refresh_at": "2025-03-22T15:40:00+09:00",
+    "stale": false
+  },
+  "meta": {
+    "request_id": "req-example"
+  }
+}
+```
+
+**처리 규칙:** 발화점의 기상청 격자에서 최신 정시(지금 − 40분을 내림)의 초단기실황 관측을 줍니다. 같은 격자·같은 정시 관측은 서버가 weather_hours에 저장해 재사용하므로 기상청은 1시간에 1번만 부릅니다. `next_refresh_at`은 다음 관측이 나오는 때(정시 + 1시간 40분)이며, 기상청을 못 부르면 마지막 관측을 `stale: true`로 줍니다. 실시간 원천이 아니거나(서버 설정 WEATHER ≠ kma) 종료된 산불이면 최신 예측의 0시 값을 주고 `next_refresh_at`은 null입니다. `wind_dir_name`은 16방위(「남동」)입니다.
+
+**주요 오류:** 503 WEATHER_UNAVAILABLE (보여 줄 관측도 예측도 없을 때)
 
 <a id="map-01"></a>
 
@@ -3057,7 +3325,8 @@ expected_perimeter_id: ID 필수
         "attrs": {
           "model": "시연 기종",
           "capacity_l": 8000
-        }
+        },
+        "deployed_incident_id": null
       }
     ],
     "next_cursor": null,
@@ -3069,7 +3338,7 @@ expected_perimeter_id: ID 필수
 }
 ```
 
-**처리 규칙:** 전체 보유·개별 상태와 산불 투입 수를 분리합니다. COMMANDER/VIEWER는 허용된 incident_id 문맥의 관할·응원 범위로 제한합니다. 실제 범위·전국 자원 열람 정책은 Q-08에서 확정합니다.
+**처리 규칙:** 전체 보유·개별 상태와 산불 투입 수를 분리합니다. v0.5: 자원마다 `deployed_incident_id`(투입된 산불, 아니면 null)를 줍니다. COMMANDER/VIEWER는 허용된 incident_id 문맥의 관할·응원 범위로 제한합니다. 실제 범위·전국 자원 열람 정책은 Q-08에서 확정합니다.
 
 **주요 오류:** 공통 401·403·404·422·500 오류를 적용합니다.
 
@@ -3101,7 +3370,7 @@ expected_perimeter_id: ID 필수
 
 **Response**
 
-`data`: {bases: ResourceCount[], incident_deployed: object 또는 null}
+`data`: {bases: ResourceCount[], incident_deployed: object 또는 null, incident_linked: object 또는 null}
 
 ```json
 {
@@ -3128,6 +3397,10 @@ expected_perimeter_id: ID 필수
       "crew": {
         "total": 85
       }
+    },
+    "incident_linked": {
+      "HELICOPTER": 2,
+      "VEHICLE": 5
     }
   },
   "meta": {
@@ -3136,7 +3409,7 @@ expected_perimeter_id: ID 필수
 }
 ```
 
-**처리 규칙:** 각 ResourceCount는 base_id: ID, kind: ResourceKind, available/deployed/maintenance/total: 0 이상 integer입니다. 상태 필터를 받지 않고 종류·기지·허용범위 전체 상태를 집계합니다. incident_deployed는 incident_id 미지정 시 null, 지정 시 Situation.deployed입니다. 보유 상태의 deployed를 특정 산불 투입 수로 해석하지 않습니다.
+**처리 규칙:** 각 ResourceCount는 base_id: ID, kind: ResourceKind, available/deployed/maintenance/total: 0 이상 integer입니다. 상태 필터를 받지 않고 종류·기지·허용범위 전체 상태를 집계합니다. incident_deployed는 incident_id 미지정 시 null, 지정 시 Situation.deployed입니다. 보유 상태의 deployed를 특정 산불 투입 수로 해석하지 않습니다. **v0.5: incident_linked**는 자원 연결(deployed_incident_id)로 센 그 산불의 {HELICOPTER, VEHICLE} 수로, 상황 보고 숫자(incident_deployed)와 따로 보여 줍니다. incident_id 미지정 시 null.
 
 **주요 오류:** 공통 401·403·404·422·500 오류를 적용합니다.
 
@@ -3160,7 +3433,7 @@ expected_perimeter_id: ID 필수
 
 **Request Body**
 
-Resource의 id를 제외한 kind·name·base_id 필수, status 생략 시 AVAILABLE, attrs 생략 시 {}
+Resource의 id를 제외한 kind·name·base_id 필수, status 생략 시 AVAILABLE, attrs 생략 시 {}. v0.5: deployed_incident_id는 status=DEPLOYED면 필수(진행 중 산불), 아니면 생략/null
 
 ```json
 {
@@ -3222,7 +3495,7 @@ Resource의 id를 제외한 kind·name·base_id 필수, status 생략 시 AVAILA
 
 **Request Body**
 
-kind·name·base_id·status·attrs 중 1개 이상. 타입·제약은 Resource 등록과 같고 null 불가
+kind·name·base_id·status·attrs·deployed_incident_id 중 1개 이상(v0.5: status=DEPLOYED로 바꾸면 deployed_incident_id 필수, 다른 상태면 null로 풀림). 타입·제약은 Resource 등록과 같고 deployed_incident_id만 null 허용
 
 ```json
 {
@@ -3540,25 +3813,41 @@ name·org_type·coverage_area_ids·geometry 중 1개 이상. geometry만 null �
 
 **Response**
 
-`data`: Page<Proposal에서 items 제외>
+`data`: Page<ProposalVersion>
 
 ```json
 {
   "data": {
     "items": [
       {
+        "id": "72",
+        "version": "v1.2",
+        "trigger": "PREDICTION",
+        "created_at": "2025-03-22T12:53:00+09:00",
+        "judged_stage": "STAGE1",
+        "predicted_stage": "STAGE2",
+        "category_counts": {
+          "IMMEDIATE": 9,
+          "STANDBY": 2,
+          "CONSULT": 2,
+          "REQUEST": 3
+        },
+        "changed_count": 2
+      },
+      {
         "id": "71",
-        "incident_id": "100",
-        "prediction_id": "41",
-        "perimeter_version": 1,
-        "seq": 1,
         "version": "v1.1",
         "trigger": "PREDICTION",
-        "correction_id": null,
+        "created_at": "2025-03-22T12:05:00+09:00",
         "judged_stage": "STAGE1",
         "predicted_stage": "STAGE1",
-        "created_at": "2025-03-22T12:05:00+09:00",
-        "proposal_stale": false
+        "category_counts": {
+          "IMMEDIATE": 8,
+          "STANDBY": 3,
+          "CONSULT": 2,
+          "REQUEST": 3
+        },
+        "changed_count": null
       }
     ],
     "next_cursor": null,
@@ -3570,7 +3859,7 @@ name·org_type·coverage_area_ids·geometry 중 1개 이상. geometry만 null �
 }
 ```
 
-**처리 규칙:** id DESC, 산불별 최신부터. 같은 화선에서 예측 재실행·상황 정정을 해도 seq가 증가합니다. 과거 화선 정정 여부는 PER-01로 확인합니다.
+**처리 규칙:** id DESC, 산불별 최신부터. 같은 화선에서 예측 재실행·상황 정정을 해도 seq가 증가합니다(version 「v{화선}.{순번}」). 과거 화선 정정 여부는 PER-01로 확인합니다. v0.5: 한 줄은 이력 표에 필요한 칸만(ProposalVersion) — changed_count는 바로 앞 버전 대비 바뀐 항목 수(ProposalItem의 「변경」 판단, PROP-04 counts.changed와 같음)이고 첫 버전은 null입니다. 나머지 칸(prediction_id·base_at 등)은 PROP-03에서 봅니다.
 
 **주요 오류:** 공통 401·403·404·422·500 오류를 적용합니다.
 
@@ -3603,67 +3892,78 @@ name·org_type·coverage_area_ids·geometry 중 1개 이상. geometry만 null �
 ```json
 {
   "data": {
-    "id": "71",
-    "incident_id": "100",
-    "prediction_id": "41",
-    "perimeter_version": 1,
-    "seq": 1,
-    "version": "v1.1",
+    "id": "72",
+    "version": "v1.2",
     "trigger": "PREDICTION",
-    "correction_id": null,
+    "created_at": "2025-03-22T12:53:00+09:00",
+    "base_at": "2025-03-22T12:50:00+09:00",
+    "prediction_id": "41",
     "judged_stage": "STAGE1",
-    "predicted_stage": "STAGE1",
-    "created_at": "2025-03-22T12:05:00+09:00",
-    "proposal_stale": false,
+    "predicted_stage": "STAGE2",
     "items": [
       {
-        "id": "72",
         "item_code": "S1",
+        "name": "대응단계 판단·격상 검토·지휘권 인계",
         "axis": "SUPPRESSION",
+        "state": "GENERATED",
         "categories": [
-          "STANDBY"
+          "STANDBY",
+          "CONSULT"
         ],
-        "text": "현재 단계 기준을 유지합니다 [1].",
-        "detail": {
-          "status": "maintain",
-          "finding": "현재 기준과 P5 기준 단계 유지",
-          "facts": {
-            "now": {
-              "stage": "1단계",
-              "area_ha": 8,
-              "wind_ms": 2.1,
-              "facility": 12
-            },
-            "p5": {
-              "stage": "1단계",
-              "area_ha": 9,
-              "wind_ms": 2.6,
-              "facility": 12
-            }
-          },
-          "targets": [],
-          "categories": [
-            "대기"
-          ],
-          "withheld": [
-            "진화예상시간: MVP 제외"
-          ],
-          "rule_basis": [
-            "SM-p073"
-          ]
-        },
-        "citations": [
+        "finding": "현재 기준 1단계(피해면적 48.5 ha · 평균풍속 3.4 m/s · 시설피해 우려 최소 2동) · P5 기준 2단계(피해면적 363 ha) → 5시간 안에 2단계 기준 도달 예상 · 지휘권자 의성군수 → 경상북도지사",
+        "withheld": [
           {
-            "id": "81",
-            "k": 1,
-            "chunk_id": "91",
-            "chunk_code": "SM-p073-01",
-            "doc_name": "시연 근거 문서",
-            "page": 73,
-            "section": "대응단계 판단기준"
+            "field": "진화예상시간",
+            "reason": "MVP에서 제외"
           }
         ],
-        "change_type": "UNCHANGED"
+        "change_type": "CHANGED",
+        "sections": [
+          {
+            "title": "1. 대응단계 판단·격상 검토",
+            "blocks": [
+              {
+                "type": "paragraph",
+                "category": "CONSULT",
+                "body": "피해면적 48.5 ha, 평균풍속 3.4 m/s, 시설피해 우려 최소 2동으로 세 기준 모두 확산대응 1단계에 해당합니다. 확산대응 1단계 발령을 산림청장과 협의하십시오.",
+                "cite": "[p.73·91]",
+                "quote": "산림청장은 대응단계 판단기준에 따라 산불현장 통합지휘본부와 협의하여 대응단계를 발령한다",
+                "evidence": [
+                  "SM-p073-s01",
+                  "SM-p091-s02"
+                ],
+                "text": "피해면적 48.5 ha, … 확산대응 1단계 발령을 산림청장과 협의하십시오 [p.73·91].",
+                "situation": "피해면적 48.5 ha, 평균풍속 3.4 m/s, 시설피해 우려 최소 2동으로 세 기준 모두 확산대응 1단계에 해당합니다.",
+                "action_text": "확산대응 1단계 발령을 산림청장과 협의하십시오.",
+                "topic": "현재 기준 단계",
+                "source": "rule+llm"
+              }
+            ]
+          }
+        ],
+        "evidence": [
+          {
+            "chunk_id": "SM-p073-s01",
+            "label": "p.73",
+            "doc_name": "「산불 재난」 위기관리 표준매뉴얼",
+            "section": "대응단계 판단기준",
+            "page": 73,
+            "origin": "판정 근거",
+            "text": "(근거 원문 전체)"
+          }
+        ]
+      },
+      {
+        "item_code": "E3",
+        "name": "취약시설 조치",
+        "axis": "EVACUATION",
+        "state": "NOT_TRIGGERED",
+        "categories": [],
+        "finding": "",
+        "withheld": [],
+        "change_type": null,
+        "sections": [],
+        "evidence": []
       }
     ]
   },
@@ -3673,7 +3973,7 @@ name·org_type·coverage_area_ids·geometry 중 1개 이상. geometry만 null �
 }
 ```
 
-**처리 규칙:** 아직 제안서가 없으면 data=null입니다. 필터와 건수는 items의 axis·categories로 프론트에서 계산할 수 있습니다. 여러 categories를 가진 항목은 각 구분에 포함되므로 구분 건수 합과 전체 항목 수는 다를 수 있습니다.
+**처리 규칙:** 아직 제안서가 없으면 data=null입니다. v0.5: items는 **늘 12칸**(S1→S6, E1→E6)이고 발동 안 한 항목은 `state: NOT_TRIGGERED`입니다(예시는 12칸 중 2칸). 필터와 건수는 items의 axis·categories로 프론트에서 계산할 수 있습니다. 여러 categories를 가진 항목은 각 구분에 포함되므로 구분 건수 합과 전체 항목 수는 다를 수 있습니다. 근거 원문은 items[].evidence에 함께 들어 있어 별도 조회 API가 없습니다(EVD-01 삭제). change_type은 바로 앞 버전과 비교한 값입니다(ProposalItem 「변경」 판단). 새 제안서가 저장될 때만 최신이 바뀌므로, 화면은 PRED-05 SUCCEEDED나 INC-03 latest_proposal_id가 바뀔 때 다시 부릅니다.
 
 **주요 오류:** 공통 401·403·404·422·500 오류를 적용합니다.
 
@@ -3707,66 +4007,25 @@ name·org_type·coverage_area_ids·geometry 중 1개 이상. geometry만 null �
 {
   "data": {
     "id": "71",
-    "incident_id": "100",
-    "prediction_id": "41",
-    "perimeter_version": 1,
-    "seq": 1,
     "version": "v1.1",
     "trigger": "PREDICTION",
-    "correction_id": null,
+    "created_at": "2025-03-22T12:05:00+09:00",
+    "base_at": "2025-03-22T12:50:00+09:00",
+    "prediction_id": "41",
     "judged_stage": "STAGE1",
     "predicted_stage": "STAGE1",
-    "created_at": "2025-03-22T12:05:00+09:00",
-    "proposal_stale": false,
     "items": [
       {
-        "id": "72",
-        "item_code": "S1",
-        "axis": "SUPPRESSION",
-        "categories": [
-          "STANDBY"
-        ],
-        "text": "현재 단계 기준을 유지합니다 [1].",
-        "detail": {
-          "status": "maintain",
-          "finding": "현재 기준과 P5 기준 단계 유지",
-          "facts": {
-            "now": {
-              "stage": "1단계",
-              "area_ha": 8,
-              "wind_ms": 2.1,
-              "facility": 12
-            },
-            "p5": {
-              "stage": "1단계",
-              "area_ha": 9,
-              "wind_ms": 2.6,
-              "facility": 12
-            }
-          },
-          "targets": [],
-          "categories": [
-            "대기"
-          ],
-          "withheld": [
-            "진화예상시간: MVP 제외"
-          ],
-          "rule_basis": [
-            "SM-p073"
-          ]
-        },
-        "citations": [
-          {
-            "id": "81",
-            "k": 1,
-            "chunk_id": "91",
-            "chunk_code": "SM-p073-01",
-            "doc_name": "시연 근거 문서",
-            "page": 73,
-            "section": "대응단계 판단기준"
-          }
-        ],
-        "change_type": "UNCHANGED"
+        "item_code": "E3",
+        "name": "취약시설 조치",
+        "axis": "EVACUATION",
+        "state": "NOT_TRIGGERED",
+        "categories": [],
+        "finding": "",
+        "withheld": [],
+        "change_type": null,
+        "sections": [],
+        "evidence": []
       }
     ]
   },
@@ -3776,7 +4035,7 @@ name·org_type·coverage_area_ids·geometry 중 1개 이상. geometry만 null �
 }
 ```
 
-**처리 규칙:** 과거 버전도 전체 항목 스냅샷으로 반환합니다. 공식 단계 필드는 없으며 judged_stage·predicted_stage만 반환합니다. 숫자·근거는 해당 버전에 연결된 것을 사용합니다.
+**처리 규칙:** 과거 버전도 그때 저장한 전체 12칸 스냅샷으로 반환합니다(예시는 1칸만). 한번 만든 버전은 바뀌지 않으므로 change_type도 **그 버전의 바로 앞 버전**과 비교한 고정값입니다(첫 버전이면 모두 null). 공식 단계 필드는 없으며 judged_stage·predicted_stage만 반환합니다. 숫자·근거는 해당 버전에 저장된 것을 사용합니다. 「지난 버전인가」는 INC-03의 latest_proposal_id와 비교합니다. 다른 산불의 proposal_id이거나 없으면 404입니다.
 
 **주요 오류:** 공통 401·403·404·422·500 오류를 적용합니다.
 
@@ -3804,66 +4063,76 @@ name·org_type·coverage_area_ids·geometry 중 1개 이상. geometry만 null �
 
 **Response**
 
-`data`: {proposal_id: ID, previous_proposal_id: ID 또는 null, added: ProposalItem[], changed: {before: ProposalItem, after: ProposalItem}[], removed: ProposalItem[]}
+`data`: ProposalDiff
 
 ```json
 {
   "data": {
-    "proposal_id": "71",
-    "previous_proposal_id": null,
-    "added": [
+    "version": "v2.2",
+    "previous_version": "v2.1",
+    "trigger": "CORRECTION",
+    "created_at": "2025-03-22T15:40:05+09:00",
+    "cause": "상황 정정: 박곡리 대피 완료, 헬기 6대 투입",
+    "counts": {
+      "changed": 3,
+      "wording_only": 2,
+      "same": 7
+    },
+    "items": [
       {
-        "id": "72",
-        "item_code": "S1",
-        "axis": "SUPPRESSION",
-        "categories": [
-          "STANDBY"
-        ],
-        "text": "현재 단계 기준을 유지합니다 [1].",
-        "detail": {
-          "status": "maintain",
-          "finding": "현재 기준과 P5 기준 단계 유지",
-          "facts": {
-            "now": {
-              "stage": "1단계",
-              "area_ha": 8,
-              "wind_ms": 2.1,
-              "facility": 12
-            },
-            "p5": {
-              "stage": "1단계",
-              "area_ha": 9,
-              "wind_ms": 2.6,
-              "facility": 12
-            }
-          },
-          "targets": [],
-          "categories": [
-            "대기"
+        "item_code": "S3",
+        "name": "진화자원 현황·동원 범위",
+        "change": "CHANGED",
+        "categories": {
+          "before": [
+            "IMMEDIATE",
+            "STANDBY",
+            "REQUEST"
           ],
-          "withheld": [
-            "진화예상시간: MVP 제외"
-          ],
-          "rule_basis": [
-            "SM-p073"
+          "after": [
+            "IMMEDIATE",
+            "STANDBY",
+            "REQUEST"
           ]
         },
-        "citations": [
+        "finding": {
+          "before": "투입: 헬기 23 · 장비 26 · 인력 151 / 현재 1단계 → 5시간 뒤 2단계",
+          "after": "투입: 헬기 29 · 장비 26 · 인력 151 / 현재 1단계 → 5시간 뒤 2단계"
+        },
+        "proposals": [
           {
-            "id": "81",
-            "k": 1,
-            "chunk_id": "91",
-            "chunk_code": "SM-p073-01",
-            "doc_name": "시연 근거 문서",
-            "page": 73,
-            "section": "대응단계 판단기준"
+            "change": "MODIFIED",
+            "topic": "투입 자원",
+            "before": {
+              "category": "IMMEDIATE",
+              "body": "현재 헬기 23대(산림청 5, 지자체 16, 소방 2)가 투입되어 있습니다. 가용 헬기를 집중 투입하십시오."
+            },
+            "after": {
+              "category": "IMMEDIATE",
+              "body": "현재 헬기 29대(산림청 9, 지자체 16, 소방 4)가 투입되어 있습니다. 가용 헬기를 집중 투입하십시오."
+            }
           }
         ],
-        "change_type": "UNCHANGED"
+        "rows": {
+          "added": [],
+          "removed": []
+        },
+        "note": null
       }
     ],
-    "changed": [],
-    "removed": []
+    "wording_only_items": [
+      "S1",
+      "E5"
+    ],
+    "same_items": [
+      "S4",
+      "S5",
+      "S6",
+      "E1",
+      "E3",
+      "E4",
+      "E6"
+    ]
   },
   "meta": {
     "request_id": "req-example"
@@ -3871,7 +4140,7 @@ name·org_type·coverage_area_ids·geometry 중 1개 이상. geometry만 null �
 }
 ```
 
-**처리 규칙:** 직전은 같은 산불에서 현재 id보다 작은 가장 큰 제안서입니다. item_code로 맞추고 categories·text를 비교합니다. 첫 버전은 전부 added입니다. detail만 달라졌을 때 변경 태그를 확장할지는 기존 DB 기준을 유지하고 추후 별도 합의합니다.
+**처리 규칙:** 직전은 같은 산불에서 현재 id보다 작은 가장 큰 제안서입니다. v0.5: item_code로 맞추고 ProposalItem의 「변경」 판단으로 **바뀐 항목만, 항목 안에서도 바뀐 부분만** 돌려줍니다 — 판정 한 줄 이전/이후, 바뀐 제안 문단(주제 topic으로 짝, 같은 주제 여러 문단은 순서대로, 주제 없는 문단은 같은 문장끼리만), 목록·표·※ 줄의 +/−. LLM 표현만 바뀐 항목은 건수(counts.wording_only)와 코드 목록만 줍니다. 첫 버전은 previous_version·cause·counts가 null이고 목록은 모두 []입니다. 카드의 「변경」 태그를 누르면 같은 응답에서 그 항목만 골라 보여 줍니다.
 
 **주요 오류:** 공통 401·403·404·422·500 오류를 적용합니다.
 
@@ -3930,58 +4199,11 @@ expected_prediction_id: ID, situation_revision: string 모두 필수
 
 **주요 오류:** 409 INCIDENT_ENDED / STALE_PREDICTION / STALE_SITUATION / REGENERATION_NOT_NEEDED, 422 NO_PREDICTION
 
-<a id="evd-01"></a>
-
-### EVD-01 · 인용 근거 본문
-
-
-| 항목 | 내용 |
-| --- | --- |
-| Method·URL | `GET /api/v1/citations/{citation_id}` |
-| 권한 | COMMANDER |
-| 성공 상태 | 200 |
-| 근거 | [DB-설계.md · citations·evidence_chunks](https://github.com/wildfire-guard-capstone/wfg-docs/blob/43dc969703cdb65192e07e1341785ce38bca60c6/docs/설계/DB-설계.md) · [데이터-자원.md · D-31](https://github.com/wildfire-guard-capstone/wfg-docs/blob/43dc969703cdb65192e07e1341785ce38bca60c6/docs/설계/데이터-자원.md) |
-
-**Path parameter:** `citation_id`: ID
-
-**Query parameter**
-
-없음.
-
-**Request Body**
-
-없음.
-
-**Response**
-
-`data`: CitationRef + {text: string, document_url: string 또는 null}
-
-```json
-{
-  "data": {
-    "id": "81",
-    "k": 1,
-    "chunk_id": "91",
-    "chunk_code": "SM-p073-01",
-    "doc_name": "시연 근거 문서",
-    "page": 73,
-    "section": "대응단계 판단기준",
-    "text": "시연용 근거 본문입니다. 실제 서비스에서는 연결된 청크 본문을 반환합니다.",
-    "document_url": null
-  },
-  "meta": {
-    "request_id": "req-example"
-  }
-}
-```
-
-**처리 규칙:** citation→제안 항목 또는 질문→산불의 관할을 검증합니다. 청크가 retired_at을 가졌어도 지난 제안·답변의 근거는 계속 열려야 합니다. 내부 매뉴얼 원문 링크 공개 범위 미정으로 document_url=null을 제안합니다. 임베딩·FAISS 내부 번호는 노출하지 않습니다.
-
-**주요 오류:** 공통 401·403·404·422·500 오류를 적용합니다.
-
 <a id="ai-01"></a>
 
 ### AI-01 · 질의응답 또는 정정 확인안
+
+> **v0.5: 정리 전 — v0.4 그대로 둠(확인 필요).** 답변 근거는 제안서처럼 Evidence 모양으로 바뀔 예정이고, 정정 확인안은 상황 정정(COR-01)을 둘지 정할 때 함께 정합니다.
 
 
 | 항목 | 내용 |
@@ -4613,7 +4835,7 @@ name·organization·role·admin_area_id 중 1개 이상, 타입은 발급과 동
 
 <a id="rules"></a>
 
-## 7. 지도·규칙 엔진 결과의 화면 적용
+## 7. 지도 레이어와 위험도 변수
 
 ### 7.1 지도 레이어 ID — API 매핑 제안
 
@@ -4630,65 +4852,9 @@ name·organization·role·admin_area_id 중 1개 이상, 타입은 발급과 동
 
 바탕지도·위성영상·라벨은 이 공간 데이터 API와 별개 외부 제공자 리소스입니다. 서버 API 키·내부 파일 경로를 프론트에 보내지 않습니다. OpenFreeMap 사용 시 데이터 자원 문서의 출처 표기를 적용합니다. 실제 운영 스타일·출처 표기는 배포 설정에서 확인합니다.
 
-### 7.2 targets → 지도 연결
+> v0.5: v0.4의 7.2 targets → 지도 연결 · 7.3 제안 detail.facts 해석 · 7.4 E4 대피소 후보 · 7.5 E5 도로·E6 전파 구분은 삭제했습니다. 제안서 응답에 규칙 판정의 facts·targets를 넣지 않고(지도 강조는 MVP 제외), 항목도 12개(S1~S6·E1~E6)로 바뀌었습니다. 대피소 후보·도로 통제 같은 내용은 해당 항목의 sections(목록·표)에 글로 들어 있습니다.
 
-최신 규칙 엔진의 출력 참조를 서버에서 아래 형식으로 정규화하는 안입니다. **문자열 안 숫자는 해당 테이블의 실제 PK**이며 이름을 ID처럼 보내지 않습니다.
-
-| 참조 | MAP-03 entity_type | 표시 대상 |
-| --- | --- | --- |
-| village:1024 | village | villages.geom |
-| facility:55 | facility | facilities.geom |
-| map_feature:1021 | map_feature | 원본 도로·송전 등 요소 |
-| resource_base:31 | resource_base | 고정 기지. 위치 null이면 지도 표시 생략 |
-| admin_area:11 | admin_area | 행정구역 경계 |
-
-도로 통제 구간 하나가 여러 도로 행을 합친 결과면 targets에 관련 map_feature ID를 모두 둡니다. `map_feature:power_line:3` 같은 혼합 예시와 `admin_area:안평면` 같은 이름 참조는 규칙 엔진과 어댑터 사이에서 바꿔야 합니다. 어떤 필드에서 정규화·저장할지는 Q-04 검토 사항입니다.
-
-### 7.3 제안 detail.facts 해석
-
-`RuleDetail`의 공통 6개 키는 유지하고, facts는 항목마다 다릅니다. 아래는 현재 규칙 엔진 설계의 필드이며 전체 원문은 1절의 고정 커밋 링크로 추적합니다. 엔진의 판정 status와 categories를 프론트가 자체 재판정하지 않습니다.
-
-| 항목 | 화면 주제 | facts에서 읽는 정보·현재 범위 |
-| --- | --- | --- |
-| S1 | 대응단계·격상 대비·지휘권 인계 | now/p5의 stage·area_ha·wind_ms·facility·요소별 단계·decided_by, change.prev/type, commander.reader/now/next/handover/reason. status는 maintain 또는 escalation_expected 등 |
-| S2 | 우선지역·보호대상 | life.villages/vulnerable, infrastructure, property.villages/total, forest.area_p5_ha. 인명→송전·국가유산→주택→산림 순의 근거 기반 안내 |
-| S3 | 자원 투입·응원 | deployed, scope.now/p5, standby_now, added_at_p5. 기지·거리·대기 대수. 추가 투입 대수·배치 구역 산정은 근거 없어 withheld |
-| S4 | 낮·밤 전략 | sun, wind[]의 time/dir/ms, max.ms/time. 운용 가능 여부를 임의로 판단하지 않고 withheld의 풍속·시정 기준 공백 표시 |
-| S5 | 시설 보호 | houses.villages/total, power[]의 kind/name/kv/zone/km, heritage[]의 name/grade/zone |
-| S6 | 대책회의·협조 | requests[]의 item/what/targets/near. E3·E5·E7·S3·S5에서 타 기관에 요청할 일을 모음. 지휘권 인계는 S1로 이동 |
-| S7 | 진화인력 안전 | 바람·확산 방향·임도 참고 등 기존 LLM 입력 범위. 최신 문서에서 S7의 구체 facts 계약이 완성되지 않았으므로 Q-07에서 확정 |
-| E1 | 위험구역 | burning/p5/p8 마을의 읍면·리. 법정리 영역 겹침이며 주거지에 실제 불이 닿았다는 확정이 아님 |
-| E2 | 대피 순서·시점 | immediate/pre_evac, 이름·읍면·people/by/elderly/night/evac_order/evacuated, sunset. 도달 시각→65세 이상 순, 야간은 일몰 전 안내 |
-| E3 | 취약시설 조치 | immediate/pre_evac, 시설명·kind·village·emd·by·daytime_only, sunset. 마을 단계로 조치. 차량 필요 대수 산정은 제외 |
-| E4 | 대피소 후보 | facts.villages는 shelter_options. 마을별 people/arrival/evacuated, village_sites/hub_sites, excluded, decision_needed. 아래 후보 DTO 참조 |
-| E5 | 도로 통제 요청 | facts.roads는 road_sections 배열. road/ref/grade/section/emd/zone/arrival/km/police. 예시의 'road_sections 그대로' 문구는 실제 데이터로 대체 |
-| E6 | 재난문자·방송 전파 제안 | areas[]의 sigungu/emd/stage(go 또는 set)/villages/change(new·up·same)/prev. 전체 대상 목록과 직전 제안 대비 변화. 실제 발송·문안 작성은 제외 |
-| E7 | 인명 수색·구조 요청 | villages[]의 name/emd/arrival/evac_order/fire_station(name·km). 이미 닿았고 대피 완료 보고 없는 마을. 출동 안전센터·고립 여부는 판정하지 않음 |
-
-위 facts의 세부 중첩 키는 항목별 설계입니다. 엔진 내부 JSON은 11/5 문서와 동기화하고, 프론트는 원문 전체를 강한 고정 타입으로 단정하기 전에 담당자와 타입을 확정합니다. 화면 공통 기능은 finding·targets·withheld·text·citations를 먼저 연결할 수 있습니다.
-
-### 7.4 E4 대피소 후보
-
-대피소를 자동 배정하거나 주민을 여러 시설로 나누지 않습니다. 리·읍면·시군 경계로 후보를 자르지 않고 **마을 시설·거점 시설 각각 가까운 2곳**을 제시합니다. 마을 대표점부터 직선거리로 계산하며, 이동 경로·차량 소요시간으로 표시하지 않습니다.
-
-| 필드 | 타입·의미 |
-| --- | --- |
-| village / emd / zone | string. 대상 리·읍면·구역(p5 또는 p8 등 원문값) |
-| arrival | string. 서버가 만든 표시 시각, 다음 날 구분 포함. 프론트가 단독 HH:mm로 재계산하지 않음 |
-| people / evacuated | integer / boolean. 위험구역은 인구, 잠재 위험구역은 65세 이상, 대피 완료면 people=0 |
-| village_sites / hub_sites | 후보 배열. 각 name·kind: string, safety: safe 또는 exception, km: number, capacity: integer 또는 null |
-| excluded | {name: string, reason: string}[] |
-| decision_needed | 후보가 전혀 없을 때 string, 그 외 생략 |
-
-P0~P5 안 후보는 제외합니다. P6~P8 후보는 원칙 제외이고 안전 후보가 없을 때만 exception으로 별도 표시합니다. 모텔은 후보에서 제외합니다. 개방 여부·남은 수용 인원은 실시간 자료가 없어 확인 필요로 안내합니다.
-
-### 7.5 E5 도로·E6 전파 구분
-
-- E5는 P0~P5와 겹치는 큰 도로를 노선 번호(ref, 없으면 도로명)로 묶어 이어진 구간을 만듭니다. E5의 zone=p0은 이미 닿음, p5는 5시간 안입니다. 다른 결과 블록의 burning/p5/p8 표현과 혼동하지 않습니다.
-- E5는 구간명·범위 내 길이·가장 이른 도달 시각·가까운 **경찰서**를 표시합니다. 정확한 통제 지점·우회로·통제 순위는 제안하지 않습니다. 요청 기관은 도로 등급과 근거를 받아 LLM이 문장에 적습니다.
-- E6의 Go/Set은 대피 전파 제안 단계이고, 실제 재난문자 발송 여부나 공식 대응단계가 아닙니다. `disaster_sms_sent` 하나로 읍면별 발송 이력을 추정하지 않습니다.
-
-### 7.6 위험도 23개 변수
+### 7.2 위험도 23개 변수
 
 R = Σ(포함 변수의 원가중치 × 등급) ÷ Σ(포함 변수의 원가중치). 모든 변수가 있으면 분모는 **0.94**입니다. 빠진 변수를 제외할 때 0.94로 고정해서 나누지 않습니다. 포함 가중치 합이 0이면 score=null입니다. 등급은 변수별 1~5, 최종 R은 1~5이며 화면에서 소수 둘째 자리로 표시하는 안입니다. 기여도 합은 score와 일치해야 합니다.
 
@@ -4732,10 +4898,10 @@ R = Σ(포함 변수의 원가중치 × 등급) ÷ Σ(포함 변수의 원가중
 | 보고 지도 | MAP-01 → MAP-02·MAP-04. 발화점·실측 폴리곤 작성, 서버 결과로 버전 갱신 |
 | 보고·정정 | INC-02 또는 PER-02·03 → INC-03·PER-01 재조회. 새 화선이면 재예측 안내 |
 | 지도 탐색 | bbox 변경에 맞춰 MAP-02. 이전 응답이 뒤늦게 와도 현재 화면 범위를 덮어쓰지 않게 취소/요청 구분 |
-| 예측 실행 | PRED-01의 202 → PRED-05 조회 → 성공 후 INC-03 재조회 및 PRED-02·03·04, RISK-01, PROP-02를 동일 결과 ID로 연결 |
+| 예측 실행 | PRED-01의 202(기상을 못 받으면 바로 503) → PRED-05 조회 → 성공 후 INC-03 재조회 및 PRED-02·03·04, RISK-01, PROP-02를 동일 결과 ID로 연결. 산불현황 기상 칸은 WTH-01 |
 | 예측 실패 | 기존 도형·제안 유지, 작업 오류 안내. 버튼만 재활성화하고 중복 요청을 피함 |
-| 제안 필터·지도 강조 | PROP-02/03의 axis·categories·detail.targets 사용 → MAP-03 대상 조회. targets가 빈 배열이면 강조 없음 |
-| 근거·이력 | 문장 [k] → EVD-01, PROP-01 → PROP-03/04. 해당 버전의 근거·수치 표시 |
+| 제안 필터 | PROP-02/03의 items[].axis·categories로 진화/대피 탭·구분 필터. 지도 강조(targets)는 v0.5 응답에 없음(MVP 제외) |
+| 근거·이력 | 문단의 cite를 누르면 같은 항목의 evidence[](원문 포함)에서 찾아 표시, quote로 칠함. 이력은 PROP-01 → PROP-03/04. 해당 버전의 근거·수치 표시 |
 | 질문 | AI-01 ANSWER → 질문·답변 및 인용 표시. AI-02는 기록만 조회, 자동 다중 턴 문맥 아님 |
 | 상황 정정 | AI-01 확인안 → 사용자가 변경 전후 확인 → COR-01 → 정정 성공 즉시 상황 갱신. proposal_operation이 있으면 PRED-05 조회 |
 | 정정 후 생성 실패 | 정정은 저장됐다는 안내와 proposal_stale 표시 → PROP-05로 재시도. COR-01을 새 정정처럼 중복 호출하지 않음 |
@@ -4762,22 +4928,42 @@ R = Σ(포함 변수의 원가중치 × 등급) ÷ Σ(포함 변수의 원가중
 
 | ID | 확인할 내용 | 현재 근거·질문 | 영향 |
 | --- | --- | --- | --- |
-| Q-01 | 위험도 저장·계산·종료 정책 | DB 4.2: predictions 컬럼 추가/별도 risk_assessments, 등급 래스터 저장소, 종료 후 최대 위험도 표시가 미결. 변수별 구간 경계·수분/지형복잡도·임상도 변환·격자 30/100m·기상 시점/공간·취약인구 범위·소방서 거리 기준·최종 표시 등급도 확인. 위험도 미산출 시 예측 전체 실패인지 부분 허용인지 합의 | RISK-01, PRED-01, E2·AI |
-| Q-02 | 현재 단계 판정 시 P5 가용 시점 | DB는 산불/화선 보고 때 current_stage 판정, 시설피해 우려는 P5 안 주택+국가유산으로 규정. 최초 보고·새 화선 보고 직후 해당 P5가 아직 없거나 최신 화선과 예측 기준이 다를 때 무엇으로 판정할지 불명확. 예측 전 시설피해 결측·기상 수신 실패·NN 단계 저장·관측시각 역전도 함께 결정 | INC-02, PER-02·03, S1 |
-| Q-03 | 위기경보 유지 여부 | DB는 alert_level 입력·정정 유지, LLM·규칙 문서는 쓰는 곳이 없어 제외/팀 논의. API는 DB 필드로 남기되 실제 입력 UI·필수 여부·정정 범위를 최종 확인 | INC·COR, S1·S6 |
-| Q-04 | detail·targets 최종 계약 | DB 옛 예시는 targets 객체, 최신 엔진은 문자열 배열. 이름 참조·kind 포함 참조도 혼재. 서버 어댑터의 PK 기반 정규화·저장 위치·권한 검증·외부 한글/영문 categories 매핑을 확정 | PROP·MAP·E5·E6 |
-| Q-05 | 작업·멱등키·동시성 | 202/작업 조회는 API 제안. 작업 큐·공유 저장소·보존기간·재시작 복구, idempotency 결과 재전달, 화선·상황·자원 변경·종료 중 커밋 정책을 확정. predictions에는 성공 행만 저장 | PRED·COR·PROP-05·보고 |
-| Q-06 | 제안 stale·정정 반영 기준 | DB는 정정시각과 제안시각 비교. 다중 정정·재시도·여러 쓰기 경로·동일시각·재생성 대상을 안전하게 판별할 revision을 어떻게 둘지 결정. rule context 저장 위치도 DB에 없음(proposals.context는 제안일 뿐) | INC-03, COR, PROP-05, AI |
-| Q-07 | S7·미결 규칙·근거 준비 | 주 확산 방향·S7 facts, 시군구 최소 겹침면적(구현 기본 1ha 제안), 표준매뉴얼 청킹·rule_basis→실제 chunk 매핑·추가 검색 K·인용/숫자 검증을 확인. 문서에 적힌 코드가 실제 검색 가능한 청크임을 가정하지 않음 | 규칙·PROP·AI·EVD |
+| Q-01 | 위험도 저장·계산·종료 정책 | **v0.5 일부 확정**: 위험도를 못 구해도 예측·제안은 저장하고 RISK-01만 data: null. 아래는 미결 — DB 4.2: predictions 컬럼 추가/별도 risk_assessments, 등급 래스터 저장소, 종료 후 최대 위험도 표시가 미결. 변수별 구간 경계·수분/지형복잡도·임상도 변환·격자 30/100m·기상 시점/공간·취약인구 범위·소방서 거리 기준·최종 표시 등급도 확인. 미산출의 부분 허용 결정과 현재 서버의 시험용 위험도(fake-0)는 구분 | RISK-01, PRED-01, E2·AI |
+| Q-02 | 현재 단계 판정 시 P5 가용 시점 | **v0.5 확정**: current_stage는 예측할 때 판정(보고·정정 때 판정 안 함, STAGE_INPUT_UNAVAILABLE 삭제). **남은 것**: 관측시각 역전 — 서버는 422 INVALID_OBSERVED_AT(확인 필요). 원래 질문 — DB는 산불/화선 보고 때 current_stage 판정, 시설피해 우려는 P5 안 주택+국가유산으로 규정. 최초 보고·새 화선 보고 직후 해당 P5가 아직 없거나 최신 화선과 예측 기준이 다를 때 무엇으로 판정할지 불명확. 예측 전 시설피해 결측·기상 수신 실패·NN 단계 저장·관측시각 역전도 함께 결정 | INC-02, PER-02·03, S1 |
+| Q-03 | 위기경보 유지 여부 | **v0.5 닫음**: 위기경보(alert_level)를 API·DB에서 삭제. 원래 질문 — DB는 alert_level 입력·정정 유지, LLM·규칙 문서는 쓰는 곳이 없어 제외/팀 논의. API는 DB 필드로 남기되 실제 입력 UI·필수 여부·정정 범위를 최종 확인 | INC·COR, S1·S6 |
+| Q-04 | detail·targets 최종 계약 | **v0.5 닫음**: 제안서 응답에 detail·targets를 넣지 않음(finding·withheld만, 지도 강조 MVP 제외). 원래 질문 — DB 옛 예시는 targets 객체, 최신 엔진은 문자열 배열. 이름 참조·kind 포함 참조도 혼재. 서버 어댑터의 PK 기반 정규화·저장 위치·권한 검증·외부 한글/영문 categories 매핑을 확정 | PROP·MAP·E5·E6 |
+| Q-05 | 작업·멱등키·동시성 | **v0.5 일부 확정**: INC-02 Idempotency-Key는 DB 저장(2.4). 예측 작업 기록은 서버 메모리(재시작 시 사라짐), 작업 실패 error.code 이름(PREDICTION_INVALID·PROPOSAL_FAILED·INTERNAL_ERROR)은 확인 필요. 원래 질문 — 202/작업 조회는 API 제안. 작업 큐·공유 저장소·보존기간·재시작 복구, idempotency 결과 재전달, 화선·상황·자원 변경·종료 중 커밋 정책을 확정. predictions에는 성공 행만 저장 | PRED·COR·PROP-05·보고 |
+| Q-06 | 제안 stale·정정 반영 기준 | **v0.5**: 서버의 situation_revision은 rev-{최신 정정 id} 임시 값, proposal_stale은 최신 정정 시각 > 최신 제안서 시각. 상황 정정(COR-01)을 둘지 정할 때 함께 확정. 규칙 엔진 결과 전체는 proposals.context에 저장(DB 11/9). 원래 질문 — DB는 정정시각과 제안시각 비교. 다중 정정·재시도·여러 쓰기 경로·동일시각·재생성 대상을 안전하게 판별할 revision을 어떻게 둘지 결정. 과거에는 context 저장 위치가 미정이었으나 현재 11/9 DB에는 proposals.context가 정의됨 | INC-03, COR, PROP-05, AI |
+| Q-07 | S7·미결 규칙·근거 준비 | **v0.5 대부분 닫음**: S7 없음(12항목 S1~S6·E1~E6, 11/7). 근거 청킹·검색·인용 검증은 백엔드 에이전트 내부이고 API는 저장된 evidence만 돌려줌. 원래 질문 — 주 확산 방향·S7 facts, 시군구 최소 겹침면적(구현 기본 1ha 제안), 표준매뉴얼 청킹·rule_basis→실제 chunk 매핑·추가 검색 K·인용/숫자 검증을 확인. 문서에 적힌 코드가 실제 검색 가능한 청크임을 가정하지 않음 | 규칙·PROP·AI·EVD |
 | Q-08 | 역할·인접 범위·개인정보 | VIEWER의 제안/근거/AI 접근, REPORTER 지도·상황 반환 범위, 관할 밖 소방·경찰·병원·응원 자원, 신고자 이름·전화 마스킹, 내부 매뉴얼 본문·원문 공개 범위를 확인 | 권한 전체·INC·MAP·RES·EVD |
 | Q-09 | 인증·관리 API 운영 | 실제 라우트·응답 형식·CORS, JWT 만료값·로그아웃 폐기, 비밀번호 재발급 시 기존 JWT 무효화·초기 변경 강제·관리자 계정 발급 범위, 자원 동시 편집 방식을 확인. DB에 없는 세션/토큰버전/자원 updated_at은 구현 완료로 가정하지 않음 | AUTH·USR·RES |
-| Q-10 | 적재·기지 삭제·이력 | 전국 시도/시군구, 기지 coverage_area_ids, house, 대피소 tier, 도로 ref·인근 경찰서 적재를 확인. 기지 실제 삭제와 과거 detail.targets 참조 보존 정책 필요. 마을·시설 재적재 시 기존 ID 유지 | MAP·BASE·규칙·과거 제안 |
+| Q-10 | 적재·기지 삭제·이력 | **v0.5**: 대피소 tier 값 확정(village·hub·null). 원래 질문 — 전국 시도/시군구, 기지 coverage_area_ids, house, 대피소 tier, 도로 ref·인근 경찰서 적재를 확인. 기지 실제 삭제와 과거 detail.targets 참조 보존 정책 필요. 마을·시설 재적재 시 기존 ID 유지 | MAP·BASE·규칙·과거 제안 |
 
 설계 문서만으로 실제 서버 구현·DB 생성·공유 파일 적재 여부는 확인할 수 없습니다. 따라서 '지도·자원 테이블이 아직 없다'고 쓰지 않고 **테이블 정의는 있으며 필요한 데이터와 구현 상태를 확인해야 한다**고 구분했습니다. 근거 저장은 최신 DB 원칙·LLM·데이터 문서의 FAISS 선택을 따르며, DB 본문의 과거 pgvector/FAISS 미정 문구를 현재 전체 결정으로 확대하지 않았습니다.
 
 <a id="changes"></a>
 
-## 10. 노션 v0.3에서 바뀐 내용
+## 10. 바뀐 내용
+
+### v0.4 → v0.5 (2026-11-10)
+
+P1·P2 API를 서버 구현(`wfg-server` main `907bd42`)과 대조해 고쳤습니다. 성공·실패 구조는 v0.4를 따릅니다.
+
+| 변경 | 이번 반영 |
+| --- | --- |
+| 제안서(PROP-01~04) | 항목 12개(S1~S6·E1~E6) 늘 12칸, 본문은 sections → blocks, 판정은 finding·withheld만(detail·targets 제외), 근거 원문 Evidence 포함, 변경 태그 NEW/CHANGED/SAME, PROP-01은 ProposalVersion, PROP-04는 바뀐 부분만(ProposalDiff) |
+| 근거 | EVD-01 삭제(원문이 PROP-02 안에). CitationRef는 AI-01 정리 전까지만 남김 |
+| 위기경보 | AlertLevel·alert_level 삭제(INC-02 요청에 보내면 422). Q-03 닫음 |
+| 대응단계 판정 | 산불·화선 보고/정정 때가 아니라 예측할 때. STAGE_INPUT_UNAVAILABLE 삭제 |
+| 산불 | INC-01 ADMIN 허용(전체 지역), INC-03 running_operation_id, INC-02 Idempotency-Key 규칙 확정, INC-04 종료 시 투입 자원 자동 해제(서버 반영 예정) |
+| 화선 | PER-02·03 Polygon 허용. 관측 시각 역전은 422 INVALID_OBSERVED_AT(확인 필요) |
+| 예측·기상 | PRED-01 성공·실패 구조는 v0.4 그대로(기상은 요청 때, 실패는 503). 작업에 EVIDENCE 단계 안 나옴, 작업 실패 코드 이름(확인 필요), 위험도 미산출이어도 저장. Weather source FIXED·hours[].kind 추가. WTH-01 지금 날씨 추가 |
+| 지도·자원 | 대피소 tier 값(village·hub·null), Resource·RES-03·04 deployed_incident_id, RES-02 incident_linked |
+| 값 표기 | 영문 코드 유지. 한글 그대로는 Evidence.origin·hours[].kind 두 개 |
+| 7절 | 7.2~7.5(targets·facts·E4 후보·E5/E6 구분) 삭제, 7.6 → 7.2 |
+| 확인 필요(미정) | PER-02·03 관측 시각 규칙, 작업 실패 코드 이름, situation_revision·proposal_stale(COR-01 결정과 함께), AI-01 전체. LOG-01 from_at·to_at은 명세 그대로이고 서버가 추가 예정 |
+
+### v0.3 → v0.4 (노션 초안에서)
 
 | 변경 | 이번 반영 |
 | --- | --- |
@@ -4801,5 +4987,7 @@ R = Σ(포함 변수의 원가중치 × 등급) ÷ Σ(포함 변수의 원가중
 | --- | --- | --- |
 | 2026-10-30 | v0.3 | 기존 노션 API 초안(이 문서의 이전 기준) |
 | 2026-11-06 | v0.4 검토본 | main 고정 커밋의 설계 5개 재검토, 46개 API·요청/응답·규칙/지도 계약 재작성. docs/api-spec-v0.4 브랜치에 추가 |
+| 2026-11-10 | v0.5 검토본 | wfg-server main(907bd42)과 P1·P2 대조. 제안서 계약 재작성, EVD-01 삭제·WTH-01 추가, 위기경보 삭제. PR #66 병합 검토에서 Evidence/withheld null 허용, 재시도 보장 범위·DB 대조 출처를 보정 |
 
-요청·응답 타입과 미결 항목을 팀에서 검토한 후 main에 병합합니다. 이 문서는 docs/api-spec-v0.4 작업 브랜치에 추가하며 기존 설계 파일 5개는 수정하지 않습니다. 이후 API 계약을 바꾸면 관련 DTO·프론트 타입·목업 응답·서버 OpenAPI도 같은 변경에 맞춰 관리합니다.
+요청·응답 타입과 미결 항목을 팀에서 검토한 후 main에 병합합니다. v0.5는 docs/api-spec-v0.5 작업 브랜치에서 검토하며 다른 설계 파일은 수정하지 않습니다. 이후 API 계약을 바꾸면 관련 DTO·프론트 타입·목업 응답·서버 OpenAPI도 같은 변경에 맞춰 관리합니다.
+
