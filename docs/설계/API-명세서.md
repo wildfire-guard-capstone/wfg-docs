@@ -5,7 +5,7 @@
 | 문서 판 | v0.5 · 서버 구현 대조 검토본 |
 | 작성·조회 기준일 | 2026-11-10 (v0.4: 2026-11-06) |
 | 범위 | React·TypeScript·MapLibre 프론트엔드 ↔ FastAPI 백엔드 REST API |
-| 상태 | 팀 검토용. P1·P2 API를 `wfg-server` main(`907bd42`)의 실제 라우트·요청/응답과 대조함. 대조하지 않은 P3는 v0.4 그대로 |
+| 상태 | P1·P2는 서버 `907bd42`와 대조. AI·상황 정정 5개(AI-01·02, COR-01·02, PROP-05)는 서버 PR #24의 구현과 11/10 팀 결정을 추가 반영. P3 전체의 구현 여부와 구분(11절) |
 | 저장 예정 위치 | `docs/설계/API-명세서.md` |
 | 기준 저장소 | `wildfire-guard-capstone/wfg-docs`의 main |
 | 고정 기준 커밋 | v0.4 설계 원본 `43dc969703cdb65192e07e1341785ce38bca60c6` · v0.5 DB 대조 `4025a901d1b69e6ced9d8f0b7b48fd2cc1b97096` · 서버 `907bd42ea9b5c96704b0511567ec79e8b9dfecf5` |
@@ -27,6 +27,7 @@
 - [8. 화면 연동 순서와 검증 항목](#flow)
 - [9. 구현 전 팀 확인 사항](#questions)
 - [10. 바뀐 내용(v0.4 → v0.5, v0.3 → v0.4)](#changes)
+- [11. API 우선순위(P1 · P2 · P3)](#priority)
 
 <a id="sources"></a>
 
@@ -144,7 +145,7 @@
 - 결과를 재전달하는 멱등 처리가 확정된 것은 아래 INC-02입니다. PER-02·03·PRED-01은 키를 받는 것만으로 같은 성공 응답 재전달을 보장하지 않습니다. COR-01·PROP-05의 멱등 저장·재전달은 아직 검토 제안입니다. 같은 키로 다른 본문의 409 `IDEMPOTENCY_KEY_REUSED`는 INC-02에 적용합니다.
 - 산불별 advisory lock으로 중복 예측·제안 커밋·종료·정정을 조율합니다. 계산 중에는 긴 DB 트랜잭션을 열지 않고 커밋 직전에 종료·화선·상황 변경을 다시 확인합니다.
 - **INC-02 확정(v0.5)**: 같은 보고자·같은 키·같은 본문을 다시 보내면 처음 만든 산불을 그대로 201로 돌려주고, 같은 키·다른 본문은 409 `IDEMPOTENCY_KEY_REUSED`입니다. 키는 최대 100자이며 DB(`incidents.idempotency_key`)에 저장합니다. 서버는 키 없이도 받습니다(이때 중복을 막지 않음). PER-02·03·PRED-01은 키를 받기만 하며, 같은 요청의 재전송은 409 `STALE_PERIMETER`·`PREDICTION_RUNNING`으로 막힙니다.
-- situation_revision은 DB 컬럼으로 확정하지 않은 불투명 토큰입니다. **v0.5 서버는 `rev-{최신 상황 정정 id}`(정정이 없으면 `rev-0`) 임시 값이며, 상황 정정(COR-01)을 둘지 정할 때 함께 확정합니다(확인 필요).** 최신 정정 id만으로 충분한지, 관리자/배치 변경·기상·자원 갱신을 어떻게 감지할지 Q-05·Q-06에서 합의합니다.
+- situation_revision은 DB 컬럼으로 확정하지 않은 불투명 토큰입니다. **v0.5 서버는 `rev-{최신 상황 정정 id}`(정정이 없으면 `rev-0`)를 사용합니다. COR-01은 서버 PR #24와 명세 PR #67에서 구현·계약을 보완했습니다.** 최신 정정 id만으로 충분한지, 관리자/배치 변경·기상·자원 갱신을 어떻게 감지할지 Q-05·Q-06에서 합의합니다.
 - 작업·중복키 결과 보존, 프로세스 재시작·다중 worker, 키 만료·응답 재전달은 Q-05의 구현 전 확인 사항입니다.
 
 <a id="enums"></a>
@@ -363,7 +364,7 @@ DB의 영문 ENUM과 규칙 엔진·LLM의 한글 표시는 구분합니다. 제
 
 | 필드 | 타입 | 필수·null | 설명 |
 | --- | --- | --- | --- |
-| villages | object<string, VillageState> | 선택·null 불가 | 키는 villages.id. VillageState의 evacuated·evac_order는 boolean. 미기록 마을은 규칙 엔진에서 false로 해석 |
+| villages | object<string, VillageState> | 선택·null 불가 | 키는 villages.id. VillageState의 evacuated·evac_order·pre_evac_done은 boolean. 미기록 마을은 규칙 엔진에서 false로 해석 |
 | deployed | object | 선택·null 불가 | helicopter·vehicle·crew별 투입 수. 각 묶음이 있으면 total 필수, 0 이상 정수 |
 | deployed.helicopter | object | 선택 | total, forest, local, fire, military, police, unknown(미상) |
 | deployed.vehicle | object | 선택 | total, forest_vehicle, fire_truck, other |
@@ -4996,7 +4997,7 @@ R = Σ(포함 변수의 원가중치 × 등급) ÷ Σ(포함 변수의 원가중
 | Q-03 | 위기경보 유지 여부 | **v0.5 닫음**: 위기경보(alert_level)를 API·DB에서 삭제. 원래 질문 — DB는 alert_level 입력·정정 유지, LLM·규칙 문서는 쓰는 곳이 없어 제외/팀 논의. API는 DB 필드로 남기되 실제 입력 UI·필수 여부·정정 범위를 최종 확인 | INC·COR, S1·S6 |
 | Q-04 | detail·targets 최종 계약 | **v0.5 닫음**: 제안서 응답에 detail·targets를 넣지 않음(finding·withheld만, 지도 강조 MVP 제외). 원래 질문 — DB 옛 예시는 targets 객체, 최신 엔진은 문자열 배열. 이름 참조·kind 포함 참조도 혼재. 서버 어댑터의 PK 기반 정규화·저장 위치·권한 검증·외부 한글/영문 categories 매핑을 확정 | PROP·MAP·E5·E6 |
 | Q-05 | 작업·멱등키·동시성 | **v0.5 일부 확정**: INC-02 Idempotency-Key는 DB 저장(2.4). 예측 작업 기록은 서버 메모리(재시작 시 사라짐), 작업 실패 error.code 이름(PREDICTION_INVALID·PROPOSAL_FAILED·INTERNAL_ERROR)은 확인 필요. 원래 질문 — 202/작업 조회는 API 제안. 작업 큐·공유 저장소·보존기간·재시작 복구, idempotency 결과 재전달, 화선·상황·자원 변경·종료 중 커밋 정책을 확정. predictions에는 성공 행만 저장 | PRED·COR·PROP-05·보고 |
-| Q-06 | 제안 stale·정정 반영 기준 | **v0.5**: 서버의 situation_revision은 rev-{최신 정정 id} 임시 값, proposal_stale은 최신 정정 시각 > 최신 제안서 시각. 상황 정정(COR-01)을 둘지 정할 때 함께 확정. 규칙 엔진 결과 전체는 proposals.context에 저장(DB 11/9). 원래 질문 — DB는 정정시각과 제안시각 비교. 다중 정정·재시도·여러 쓰기 경로·동일시각·재생성 대상을 안전하게 판별할 revision을 어떻게 둘지 결정. 과거에는 context 저장 위치가 미정이었으나 현재 11/9 DB에는 proposals.context가 정의됨 | INC-03, COR, PROP-05, AI |
+| Q-06 | 제안 stale·정정 반영 기준 | **v0.5**: 서버의 situation_revision은 rev-{최신 정정 id} 임시 값, proposal_stale은 최신 정정 시각 > 최신 제안서 시각. COR-01은 서버 PR #24·명세 PR #67에서 구현과 처리 규칙을 보완. 아래 동시성·변경 감지 질문은 별도 보완 사항. 규칙 엔진 결과 전체는 proposals.context에 저장(DB 11/9). 원래 질문 — DB는 정정시각과 제안시각 비교. 다중 정정·재시도·여러 쓰기 경로·동일시각·재생성 대상을 안전하게 판별할 revision을 어떻게 둘지 결정. 과거에는 context 저장 위치가 미정이었으나 현재 11/9 DB에는 proposals.context가 정의됨 | INC-03, COR, PROP-05, AI |
 | Q-07 | S7·미결 규칙·근거 준비 | **v0.5 대부분 닫음**: S7 없음(12항목 S1~S6·E1~E6, 11/7). 근거 청킹·검색·인용 검증은 백엔드 에이전트 내부이고 API는 저장된 evidence만 돌려줌. 원래 질문 — 주 확산 방향·S7 facts, 시군구 최소 겹침면적(구현 기본 1ha 제안), 표준매뉴얼 청킹·rule_basis→실제 chunk 매핑·추가 검색 K·인용/숫자 검증을 확인. 문서에 적힌 코드가 실제 검색 가능한 청크임을 가정하지 않음 | 규칙·PROP·AI·EVD |
 | Q-08 | 역할·인접 범위·개인정보 | VIEWER의 제안/근거/AI 접근, REPORTER 지도·상황 반환 범위, 관할 밖 소방·경찰·병원·응원 자원, 신고자 이름·전화 마스킹, 내부 매뉴얼 본문·원문 공개 범위를 확인 | 권한 전체·INC·MAP·RES·EVD |
 | Q-09 | 인증·관리 API 운영 | 실제 라우트·응답 형식·CORS, JWT 만료값·로그아웃 폐기, 비밀번호 재발급 시 기존 JWT 무효화·초기 변경 강제·관리자 계정 발급 범위, 자원 동시 편집 방식을 확인. DB에 없는 세션/토큰버전/자원 updated_at은 구현 완료로 가정하지 않음 | AUTH·USR·RES |
@@ -5069,4 +5070,21 @@ P1·P2 API를 서버 구현(`wfg-server` main `907bd42`)과 대조해 고쳤습�
 | 2026-11-10 | v0.5 보완 | AI-01 · COR를 wfg-server PR #24와 맞춤(응답 칸 추가, 헬기 미상 칸, 자원 상한 기준, 이벤트 이름) |
 
 요청·응답 타입과 미결 항목을 팀에서 검토한 후 main에 병합합니다. v0.5는 docs/api-spec-v0.5 작업 브랜치에서 검토하며 다른 설계 파일은 수정하지 않습니다. 이후 API 계약을 바꾸면 관련 DTO·프론트 타입·목업 응답·서버 OpenAPI도 같은 변경에 맞춰 관리합니다.
+
+PR #67·#68 통합 검토에서는 우선순위 표의 AI-01 미정·P3 전체 미구현 문구와 COR-01 채택 대기 설명을 후속 구현에 맞게 보정하고, VillageState의 pre_evac_done을 정정 허용 목록과 맞췄습니다.
+
+
+<a id="priority"></a>
+
+## 11. API 우선순위(P1 · P2 · P3)
+
+| 우선순위 | 뜻 | API |
+| --- | --- | --- |
+| P1 (12) | 시연 핵심 흐름: 로그인 → 산불 보고 → 지도 → 예측 → 제안 | AUTH-01 · 02, INC-01 · 02 · 03, MAP-01 · 02, PRED-01 · 02 · 03 · 05, PROP-02 |
+| P2 (18) | 요구사항 기능, 핵심 흐름 다음 | AUTH-03, USR-01 · 02, INC-04, PER-01 · 02 · 03, PRED-04, RISK-01, WTH-01(v0.5 추가), RES-01 · 02, BASE-01, PROP-01 · 03 · 04, LOG-01, AI-01 |
+| P3 (16) | 관리 세부 · 초과 · 결정 대기 | USR-03 · 04 · 05 · 06, MAP-03 · 04, RES-03 · 04 · 05, BASE-02 · 03 · 04, PROP-05, AI-02, COR-01 · 02 |
+
+v0.5에서 P1의 EVD-01은 삭제했습니다(근거 원문이 PROP-02 안에). WTH-01은 P2에 추가했습니다. 이 표는 구현·확정 상태와 구분한 우선순위입니다.
+
+초기 `907bd42` 대조에서는 P1·P2 중 AI-01을 제외한 API가 구현 대상으로 확인됐습니다. 후속 서버 [PR #24](https://github.com/wildfire-guard-capstone/wfg-server/pull/24)(main 병합)와 명세 [PR #67](https://github.com/wildfire-guard-capstone/wfg-docs/pull/67)은 AI-01·AI-02·COR-01·COR-02·PROP-05를 추가 구현·보완합니다. 따라서 AI-01 미정·P3 전체 미구현이라는 이전 설명은 최신 상태에 적용하지 않습니다. 실제 배포·DB 마이그레이션·프론트 연동 검증은 별도로 확인합니다.
 
