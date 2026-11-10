@@ -123,7 +123,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | `created_at` | timestamptz | NN, 기본 now() | 언제 |
 | `user_id` | bigint | FK → `users` | 누가. 시스템 이벤트는 NULL |
 | `incident_id` | bigint | FK → `incidents` | 어느 산불. 로그인·계정 관리는 NULL |
-| `action` | varchar(50) | NN | 무엇을. 예: `LOGIN_FAILED`, `PERIMETER_REPORTED`, `PROPOSAL_CREATED`, `ITEM_NO_EVIDENCE` |
+| `action` | varchar(50) | NN | 무엇을. 예: `LOGIN_FAILED`, `PERIMETER_REPORTED`, `PROPOSAL_CREATED`, `ITEM_NO_EVIDENCE`, `QA_NO_EVIDENCE`(근거가 모자란 답변), `SITUATION_CORRECTED`, `PROPOSAL_FAILED`(정정 뒤 제안서 다시 만들기 실패 — details는 `PREDICTION_FAILED`와 같은 operation_id · code · message + correction_id) |
 | `details` | jsonb | | 세부 사실(대상 id, 버전, 변경 전후 값). **개인정보는 넣지 않음** |
 
 ### 2.2 산불·보고
@@ -176,11 +176,11 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 
 | 키 | 보고 양식 | 구분 |
 |---|---|---|
-| `helicopter` | 산불진화 헬기 | `forest`(산림청) · `local`(지자체) · `fire`(소방) · `military`(군) |
+| `helicopter` | 산불진화 헬기 | `forest`(산림청) · `local`(지자체) · `fire`(소방) · `military`(군) · `police`(경찰) · `unknown`(미상 — 기관을 모름, 11/10) |
 | `vehicle` | 장비 | `forest_vehicle`(산불진화·지휘차) · `fire_truck`(소방차) · `other`(기타) |
 | `crew` | 인력 | `special_crew`(산불특수진화대 등) · `forest_officials`(산림공무원) · `fire`(소방) · `military`(군) · `police`(경찰) · `other`(기타) |
 
-- `total`은 꼭 있고, 구분 값은 아는 것만 넣는다. 「헬기 2대 추가」처럼 구분을 모르는 정정은 `total`만 바꾼다
+- `total`은 꼭 있고, 구분 값은 아는 것만 넣는다. 「헬기 2대 추가」처럼 구분을 모르는 정정은 헬기 `unknown`(미상) · 인력과 차량 `other`(기타) 칸에 넣는다(11/10). `total`이 구분 값 합보다 크면 남는 몫도 그 칸 몫으로 본다 — 규칙 엔진은 구분 값을 더해 합계를 다시 내므로 `total`만 바꾸면 버려지기 때문이다. 기관을 알게 되면 「미상 헬기 2대는 산림청」으로 정정해 옮긴다
 - 보유·대기는 여기가 아니라 `resources`에 있다(2.6). 인력은 보유를 관리하지 않으므로 투입 수만 있다
 
 **데이터가 쌓이는 방식**
@@ -649,9 +649,11 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | `item_code` | varchar(10) | | 「이 항목 질문」으로 지정한 항목. 없으면 NULL |
 | `question` | text | NN | 질문 |
 | `answer` | text | NN | 답변. 근거 표기 포함 |
+| `evidence` | jsonb | NN, 기본 `[]` | 답변이 인용한 원문(제안 항목의 `evidence`와 같은 모양 + 답변 속 번호 `k`, 같은 쪽 조각은 `chunk_ids`로 묶음). 마이그레이션 `7c1e2a9d4b10`(11/10) |
+| `detail` | jsonb | NN, 기본 `{}` | 답변 상세: `route` · `sentences`(문장별 근거 번호 · 상황 값 출처) · `insufficient` · `no_evidence` · `tools`(고른 도구) · `assistant`(rules · exaone) · `seconds` · `llm_calls` |
 | `created_at` | timestamptz | NN, 기본 now() | |
 
-- 답변의 근거는 `citations` 대신 이 행에 같이 둔다 — AI 질의응답(AI-01)을 만들 때 `evidence` jsonb 칸을 더한다(제안 항목의 `evidence`와 같은 모양, 11/9)
+- 답변의 근거는 `citations` 대신 이 행의 `evidence`에 같이 둔다(11/9). API는 이것을 QaMessage.citations · sentences로 돌려준다
 - 질문마다 따로 답한다(앞 질문을 이어 받는 여러 턴 대화는 MVP에서 하지 않음)
 - 근거를 찾지 못하면 추측하지 않고 「근거를 찾지 못했습니다」로 답하고 `event_logs`에 남긴다(UC-QA-01 E1)
 - 정정으로 판별된 입력은 여기에 저장하지 않고 확인 카드로 넘긴다. 확인하면 `situation_corrections.input_text`에 남는다
@@ -973,9 +975,9 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | F-27 | E6 재난문자·방송 | `villages`, `admin_areas`, `incidents.situation` | ✅ | 송출 여부는 `situation.disaster_sms_sent` |
 | F-28 | E7 인명구조 | `incidents.situation.villages`, `facilities`(소방서) | ✅ | |
 | F-29 | AI 질의응답 | `qa_messages` | ✅ | 답변 근거도 같은 행(AI-01 때 칸 추가) |
-| F-30 | AI 상황 정정 | `situation_corrections`, `incidents`, `proposals`, `resources` | ✅ | 가용 범위 확인 = `resources` 대기 대수 |
+| F-30 | AI 상황 정정 | `situation_corrections`, `incidents`, `proposals`, `resources` | ✅ | 가용 범위 확인 = `resources` 칸별 대기 + 이 산불 투입 대수(11/10, 군 · 경찰 · 미상 · 기타 · 인력은 상한 없음) |
 | F-31 | 진화자원 관리 | `resources`, `resource_bases`, `event_logs` | ⚠️ | 헬기·차량·기지는 됨. **인력은 관리 대상 아님**(F-08과 같음) |
-| F-32 | 이벤트 로그 | `event_logs` | ✅ | 추가만. `action` 예: `LOGIN_FAILED`, `PREDICTION_FAILED`, `PROPOSAL_CREATED`, `ITEM_NO_EVIDENCE`, `RESOURCE_UPDATED` |
+| F-32 | 이벤트 로그 | `event_logs` | ✅ | 추가만. `action` 예: `LOGIN_FAILED`, `PREDICTION_FAILED`, `PROPOSAL_CREATED`, `ITEM_NO_EVIDENCE`, `QA_NO_EVIDENCE`, `SITUATION_CORRECTED`, `PROPOSAL_FAILED`, `RESOURCE_UPDATED` |
 
 **결과**: 32개 중 ✅ 26 · ⚠️ 5 · ❌ 1
 

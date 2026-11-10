@@ -365,12 +365,12 @@ DB의 영문 ENUM과 규칙 엔진·LLM의 한글 표시는 구분합니다. 제
 | --- | --- | --- | --- |
 | villages | object<string, VillageState> | 선택·null 불가 | 키는 villages.id. VillageState의 evacuated·evac_order는 boolean. 미기록 마을은 규칙 엔진에서 false로 해석 |
 | deployed | object | 선택·null 불가 | helicopter·vehicle·crew별 투입 수. 각 묶음이 있으면 total 필수, 0 이상 정수 |
-| deployed.helicopter | object | 선택 | total, forest, local, fire, military |
+| deployed.helicopter | object | 선택 | total, forest, local, fire, military, police, unknown(미상) |
 | deployed.vehicle | object | 선택 | total, forest_vehicle, fire_truck, other |
 | deployed.crew | object | 선택 | total, special_crew, forest_officials, fire, military, police, other |
 | disaster_sms_sent | boolean | 선택·null 불가 | 사용자가 정정한 송출 여부. E6의 읍면별 Set/Go 판정 이력과 다름 |
 
-모르는 종류별 투입 수는 생략합니다. total만 정정해도 되므로 종류별 합계와 total의 항상 일치 여부는 별도 검토합니다. 인력은 개별 자원·보유 현황으로 관리하지 않습니다.
+모르는 종류별 투입 수는 생략합니다. **기관을 모르는 투입 수는 헬기 `unknown`(미상) · 인력과 차량 `other`(기타) 칸 몫입니다(11/10).** total이 기관 칸 합보다 크면 남는 몫을 이 칸 몫으로 보며, 규칙 엔진 입력 · 정정 확인안 · COR-01 대조가 같은 규칙을 씁니다. 기관을 알게 되면 「미상 헬기 2대는 산림청」처럼 정정해 기관 칸으로 옮깁니다. 인력은 개별 자원·보유 현황으로 관리하지 않습니다.
 
 **DTO Example**
 
@@ -1370,28 +1370,34 @@ official_stage는 두지 않습니다. 예측 단계가 현재 판정보다 높�
 
 ### CitationRef
 
-> **v0.5: 제안서는 이 DTO를 쓰지 않습니다(Evidence로 바뀜).** AI-01(QaMessage)이 아직 정리 전이라 남겨 둡니다. DB에 citations · evidence_chunks 테이블을 두지 않기로 해서(DB-설계 11/9), AI-01을 정리할 때 Evidence 모양으로 바꿀 예정입니다(확인 필요).
+> **v0.5 보완(11/10, 서버 구현대로)**: AI-01 답변(QaMessage.citations)만 씁니다. 제안서는 Evidence를 씁니다. DB에 citations 테이블이 없어 `qa_messages.evidence`에 답변이 인용한 원문을 같은 행으로 저장하고(DB-설계 2.5), Evidence 칸에 답변 속 번호 `k`와 `id`를 더한 모양입니다.
 
 | 필드 | 타입 | 필수·null | 설명 |
 | --- | --- | --- | --- |
-| id | ID | 필수 | citations PK, 근거 조회용 |
-| k | integer | 필수 | 해당 문장 안의 [k], 1 이상 |
-| chunk_id / chunk_code | ID / string | 필수 | evidence_chunks.id / 변경하지 않는 code |
-| doc_name | string | 필수 | 문서명 |
+| id | string | 필수 | 「질의응답 id-k」(예: 111-1). 별도 테이블 PK가 아님 |
+| k | integer | 필수 | 답변 문장의 [k], 1 이상. 같은 표기(같은 쪽)의 조각 여러 개는 번호 하나로 묶음 |
+| chunk_id / chunk_code | string | 필수 | 근거 청크 코드(예: SM-p073-s01). 둘은 같은 값(v0.4 호환) |
+| label | string 또는 null | 필수·null 허용 | 화면 표기(「p.73」, 「시행령 제21조①·②」) |
+| doc_name | string 또는 null | 필수·null 허용 | 문서명 |
 | page | integer 또는 null | 필수·null 허용 | 법령처럼 쪽 없으면 null |
 | section | string 또는 null | 필수·null 허용 | 항목·조항 |
+| origin | string 또는 null | 필수·null 허용 | Evidence.origin과 같음: 「판정 근거」(규칙 엔진이 지정) · 「검색」(근거 검색으로 찾음). **한글 그대로** |
+| text | string 또는 null | 필수·null 허용 | 원문(묶인 조각은 「…」로 이어 붙임). 답변할 때의 스냅샷 |
 
 **DTO Example**
 
 ```json
 {
-  "id": "81",
+  "id": "111-1",
   "k": 1,
-  "chunk_id": "91",
-  "chunk_code": "SM-p073-01",
-  "doc_name": "시연 근거 문서",
+  "chunk_id": "SM-p073-s01",
+  "chunk_code": "SM-p073-s01",
+  "label": "p.73",
+  "doc_name": "「산불 재난」 위기관리 표준매뉴얼",
   "page": 73,
-  "section": "대응단계 판단기준"
+  "section": "대응단계 판단기준",
+  "origin": "판정 근거",
+  "text": "(근거 원문)"
 }
 ```
 
@@ -1404,10 +1410,12 @@ official_stage는 두지 않습니다. 예측 단계가 현재 판정보다 높�
 | --- | --- | --- | --- |
 | target | village / deployed / incident / situation | 필수 | API 제안 구분 |
 | target_id | ID | village일 때 필수 | villages.id, 다른 target은 생략 |
-| item | string | 필수 | village: evacuated·evac_order, deployed: helicopter.total 등 Situation의 허용 경로, situation: disaster_sms_sent (위기경보 정정 항목은 v0.5에서 삭제) |
-| before / after | boolean 또는 integer | 필수 | 허용 항목과 동일 타입. 서버 현재값과 before 대조 |
+| item | string | 필수 | village: evacuated·evac_order·pre_evac_done, deployed: `helicopter.total`·`helicopter.forest` 등 Situation.deployed의 묶음.칸(헬기 `unknown` 미상 포함), situation: disaster_sms_sent (위기경보 정정 항목은 v0.5에서 삭제) |
+| before / after | boolean 또는 integer | 필수 | 허용 항목과 동일 타입. 서버 현재값과 before 대조(미상·기타 칸은 total의 남는 몫 포함) |
+| label | string | 필수 | 화면에 보일 한 줄(예: 「투입 헬기(산림청) 5 → 7대」, 「안평면 괴산리 대피 완료 예(전: 아니오)」). 서버가 만듦 |
+| target_name | string | village일 때 | 「읍면 마을」 이름(예: 안평면 괴산리) |
 
-current_stage·official_stage·기상·진화예상시간·부상·고립·자원 개별 상태는 정정 허용 목록에 없습니다.
+current_stage·official_stage·기상·진화예상시간·부상·고립·자원 개별 상태는 정정 허용 목록에 없습니다. 투입 칸 하나를 바꾸면 같은 묶음의 `total` 변경도 함께 옵니다. 칸만 옮기는 정정(「미상 헬기 2대는 산림청」)은 total이 그대로라 total 줄이 없습니다.
 
 **DTO Example**
 
@@ -1417,7 +1425,9 @@ current_stage·official_stage·기상·진화예상시간·부상·고립·자�
   "target_id": "1024",
   "item": "evacuated",
   "before": false,
-  "after": true
+  "after": true,
+  "label": "안평면 괴산리 대피 완료 예(전: 아니오)",
+  "target_name": "안평면 괴산리"
 }
 ```
 
@@ -1467,6 +1477,10 @@ current_stage·official_stage·기상·진화예상시간·부상·고립·자�
 | situation_revision | string | 필수 | 확인안 생성 당시 버전 |
 | input_text | string | 필수 | 원문 |
 | changes | CorrectionChange[] | 필수 | 확인할 변경안 |
+| ignored | object[] | 필수 | 반영하지 않은 말과 이유 {text, reason}. 예: 「대응단계는 정정할 수 없음」, 「자원 현황의 가용 대수를 넘음」, 「이미 그렇게 기록됨」. 없으면 [] |
+| notes | string[] | 필수 | 확인 카드에 보일 안내. 예: 「헬기 기관을 말하지 않아 「미상」 칸에 넣었습니다(기관을 알면 「미상 헬기 2대는 산림청」처럼 다시 정정해 주십시오).」 없으면 [] |
+| summary | string | 필수 | 확인 카드 머리 문장(변경 건수 + label 목록, total 줄은 세지 않음) |
+| proposal_regenerates | boolean | 필수 | 확인하면 제안서를 다시 만드는지(예측이 있으면 true) |
 
 확인안을 받는 것만으로 DB 상황·정정 이력은 바뀌지 않습니다. 취소 시 저장 API를 호출하지 않습니다.
 
@@ -1478,16 +1492,27 @@ current_stage·official_stage·기상·진화예상시간·부상·고립·자�
   "confirmation_token": "EXAMPLE_PREVIEW_TOKEN",
   "expires_at": "2025-03-22T12:30:00+09:00",
   "situation_revision": "rev-example-1",
-  "input_text": "시연리 대피 완료",
+  "input_text": "시연리 대피 완료, 2단계 발령됐어",
   "changes": [
     {
       "target": "village",
       "target_id": "1024",
       "item": "evacuated",
       "before": false,
-      "after": true
+      "after": true,
+      "label": "안평면 시연리 대피 완료 예(전: 아니오)",
+      "target_name": "안평면 시연리"
     }
-  ]
+  ],
+  "ignored": [
+    {
+      "text": "2단계 발령됐어",
+      "reason": "대응단계는 시스템이 화선 면적 · 풍속 · 시설피해로 판정하므로 정정할 수 없습니다. 새 화선을 보고하면 다시 판정됩니다."
+    }
+  ],
+  "notes": [],
+  "summary": "변경 1건을 확인하면 상황에 저장하고 제안서를 다시 만듭니다: 안평면 시연리 대피 완료 예(전: 아니오)",
+  "proposal_regenerates": true
 }
 ```
 
@@ -1503,11 +1528,13 @@ current_stage·official_stage·기상·진화예상시간·부상·고립·자�
 | item_code | string 또는 null | 필수·null 허용 | 지정 항목 |
 | question / answer | string | 필수 | 질문 / 답변, 답변의 [k]는 citations로 연결 |
 | citations | CitationRef[] | 필수 | 근거 부족 시 [] 가능, 추정 답변 금지 |
+| route | string 또는 null | 필수·null 허용 | 답한 경로: STATUS(지금 상황) · PROPOSAL(제안서 항목) · REGULATION(규정 · 기준) · OUT_OF_SCOPE · GUIDE(사용 안내) |
+| sentences | object[] | 필수 | 답변을 문장 단위로. {text: 문장(끝에 [k]), citations: integer[](그 문장의 k), data_refs: {ref, label, value}[](그 문장이 쓴 상황 값 — ref는 situation.deployed.helicopter.total처럼 화면이 강조할 경로)}. 모든 문장은 citations 또는 data_refs가 하나 이상 |
+| insufficient | string[] | 필수 | 질문이 물었는데 자료 · 근거에서 찾지 못한 것(최대 2개). 답변 끝에 「…는 찾지 못해 답하지 않았습니다」로도 붙음 |
+| no_evidence | boolean | 필수 | 답할 자료가 전혀 없어 근거 부족 안내만 했으면 true |
 | created_at | DateTime | 필수 | 저장시각 |
 
-질문·답변 1건이 1행입니다. 이전 질문을 자동 문맥으로 이어 받지 않습니다. 상황은 변경하지 않습니다.
-
-> v0.5: AI-01은 정리 전입니다(v0.4 그대로 둠). 답변 근거(citations)는 제안서처럼 Evidence[] 모양으로 바뀔 예정입니다(확인 필요).
+질문·답변 1건이 1행입니다. 이전 질문을 자동 문맥으로 이어 받지 않습니다. 상황은 변경하지 않습니다. 답변의 숫자 · 시각 · 마을 이름은 그 문장의 출처(citations · data_refs)에 있는 것만 씁니다(서버가 검사).
 
 **DTO Example**
 
@@ -1517,20 +1544,26 @@ current_stage·official_stage·기상·진화예상시간·부상·고립·자�
   "incident_id": "100",
   "user_id": "1",
   "proposal_id": "71",
-  "item_code": "S1",
-  "question": "이 단계의 판단 근거는 무엇인가요?",
-  "answer": "판단 기준은 연결된 근거에서 확인할 수 있습니다 [1].",
-  "citations": [
+  "item_code": null,
+  "question": "지금 헬기 몇 대 투입됐어?",
+  "answer": "지금 투입된 헬기는 23대(산림청 5 · 지자체 16 · 소방 2)입니다.",
+  "citations": [],
+  "route": "STATUS",
+  "sentences": [
     {
-      "id": "81",
-      "k": 1,
-      "chunk_id": "91",
-      "chunk_code": "SM-p073-01",
-      "doc_name": "시연 근거 문서",
-      "page": 73,
-      "section": "대응단계 판단기준"
+      "text": "지금 투입된 헬기는 23대(산림청 5 · 지자체 16 · 소방 2)입니다.",
+      "citations": [],
+      "data_refs": [
+        {
+          "ref": "situation.deployed.helicopter.total",
+          "label": "투입된 헬기(합계)",
+          "value": "23대(산림청 5 · 지자체 16 · 소방 2)"
+        }
+      ]
     }
   ],
+  "insufficient": [],
+  "no_evidence": false,
   "created_at": "2025-03-22T12:10:00+09:00"
 }
 ```
@@ -4203,7 +4236,7 @@ expected_prediction_id: ID, situation_revision: string 모두 필수
 
 ### AI-01 · 질의응답 또는 정정 확인안
 
-> **v0.5: 정리 전 — v0.4 그대로 둠(확인 필요).** 답변 근거는 제안서처럼 Evidence 모양으로 바뀔 예정이고, 정정 확인안은 상황 정정(COR-01)을 둘지 정할 때 함께 정합니다.
+> **v0.5 보완(11/10)**: 서버 구현(`wfg-server` PR #24)과 맞춤. QaMessage에 route · sentences · insufficient · no_evidence, CitationRef에 label · origin · text, CorrectionPreview에 ignored · notes · summary · proposal_regenerates, UNSUPPORTED에 ignored를 더함.
 
 
 | 항목 | 내용 |
@@ -4233,7 +4266,7 @@ input_text: string(1~2000) 필수. proposal_id: ID 또는 null, item_code: strin
 
 **Response**
 
-`data`: CorrectionPreview 또는 {type: ANSWER, message: QaMessage} 또는 {type: UNSUPPORTED, reason: string}
+`data`: CorrectionPreview 또는 {type: ANSWER, message: QaMessage} 또는 {type: UNSUPPORTED, reason: string, ignored: {text, reason}[]}
 
 ```json
 {
@@ -4242,16 +4275,29 @@ input_text: string(1~2000) 필수. proposal_id: ID 또는 null, item_code: strin
     "confirmation_token": "EXAMPLE_PREVIEW_TOKEN",
     "expires_at": "2025-03-22T12:30:00+09:00",
     "situation_revision": "rev-example-1",
-    "input_text": "시연리 대피 완료",
+    "input_text": "헬기 2대 더 왔어",
     "changes": [
       {
-        "target": "village",
-        "target_id": "1024",
-        "item": "evacuated",
-        "before": false,
-        "after": true
+        "target": "deployed",
+        "item": "helicopter.unknown",
+        "before": 0,
+        "after": 2,
+        "label": "투입 헬기(미상) 0 → 2대"
+      },
+      {
+        "target": "deployed",
+        "item": "helicopter.total",
+        "before": 23,
+        "after": 25,
+        "label": "투입 헬기(합계) 23 → 25대"
       }
-    ]
+    ],
+    "ignored": [],
+    "notes": [
+      "헬기 기관을 말하지 않아 「미상」 칸에 넣었습니다(기관을 알면 「미상 헬기 2대는 산림청」처럼 다시 정정해 주십시오)."
+    ],
+    "summary": "변경 1건을 확인하면 상황에 저장하고 제안서를 다시 만듭니다: 투입 헬기(미상) 0 → 2대",
+    "proposal_regenerates": true
   },
   "meta": {
     "request_id": "req-example"
@@ -4261,7 +4307,11 @@ input_text: string(1~2000) 필수. proposal_id: ID 또는 null, item_code: strin
 
 **처리 규칙:** 질문이면 ANSWER로 질문·답변을 저장하고 상황은 바꾸지 않습니다. 정정이면 확인안만 반환합니다. 허용 목록 밖 입력·모호한 대상은 UNSUPPORTED 또는 재질문 안내로 처리하고 저장하지 않습니다. 없는 village_id·근거를 LLM이 만들어낼 수 없습니다. 종료된 산불도 질문은 허용하지만 정정 확인안은 거절합니다. 여러 턴 자동 문맥은 제외합니다.
 
-**주요 오류:** 409 INCIDENT_ENDED (정정 입력), 422 TARGET_NOT_FOUND / AMBIGUOUS_TARGET, 503 AI_UNAVAILABLE
+- 투입 수: 기관을 말하지 않으면 헬기는 미상, 인력 · 차량은 기타 칸에 넣고 notes로 알립니다. 「미상 헬기 2대는 산림청」은 미상에서 빼 그 기관 칸으로 옮깁니다(total 그대로). 줄이는 말인데 미상 · 기타 칸에 뺄 만큼이 없으면 어느 기관이 줄었는지 묻습니다(ignored).
+- 자원 상한: 자원 테이블에 있는 칸(산림청 · 지자체 임차 · 소방 헬기, 진화차 · 소방차)은 그 칸 자원의 대기 + 이 산불 투입 대수를 넘게 늘릴 수 없습니다. 넘는 줄만 ignored로 빼고 나머지는 확인안으로 보입니다(COR-01에서 다시 확인).
+- LLM(GPU 서버)에 닿지 않으면 503 AI_UNAVAILABLE입니다. 서버 설정 `ASSISTANT=rules`(기본)는 LLM 없이 규칙으로만 답합니다.
+
+**주요 오류:** 409 INCIDENT_ENDED (정정 입력), 422 VALIDATION_ERROR / TARGET_NOT_FOUND / AMBIGUOUS_TARGET / INVALID_COUNT(0보다 작아짐), 503 AI_UNAVAILABLE
 
 <a id="ai-02"></a>
 
@@ -4303,18 +4353,31 @@ input_text: string(1~2000) 필수. proposal_id: ID 또는 null, item_code: strin
         "proposal_id": "71",
         "item_code": "S1",
         "question": "이 단계의 판단 근거는 무엇인가요?",
-        "answer": "판단 기준은 연결된 근거에서 확인할 수 있습니다 [1].",
+        "answer": "화선 면적과 풍속으로 확산대응 1단계로 판정했습니다 [1].",
         "citations": [
           {
-            "id": "81",
+            "id": "111-1",
             "k": 1,
-            "chunk_id": "91",
-            "chunk_code": "SM-p073-01",
-            "doc_name": "시연 근거 문서",
+            "chunk_id": "SM-p073-s01",
+            "chunk_code": "SM-p073-s01",
+            "label": "p.73",
+            "doc_name": "「산불 재난」 위기관리 표준매뉴얼",
             "page": 73,
-            "section": "대응단계 판단기준"
+            "section": "대응단계 판단기준",
+            "origin": "판정 근거",
+            "text": "(근거 원문)"
           }
         ],
+        "route": "PROPOSAL",
+        "sentences": [
+          {
+            "text": "화선 면적과 풍속으로 확산대응 1단계로 판정했습니다 [1].",
+            "citations": [1],
+            "data_refs": []
+          }
+        ],
+        "insufficient": [],
+        "no_evidence": false,
         "created_at": "2025-03-22T12:10:00+09:00"
       }
     ],
@@ -4401,7 +4464,7 @@ confirmation_token: string 필수. 클라이언트가 changes를 재작성해서
 }
 ```
 
-**처리 규칙:** 토큰의 사용자·산불·유효시간·원문·변경안·revision과 서버 현재값·가용 자원 범위를 다시 확인합니다. 정정 행+상황 수정+로그를 먼저 한 트랜잭션으로 확정합니다. 예측이 있으면 제안 재생성 작업을 반환하고 없으면 null입니다. 제안 생성 실패는 이미 저장된 정정을 취소하지 않습니다. 작업 시작 실패 시에도 정정 저장 성공을 반환하고 proposal_stale=true, proposal_operation=null로 안내한 뒤 PROP-05로 재시도합니다.
+**처리 규칙:** 토큰의 사용자·산불·유효시간·원문·변경안·revision과 서버 현재값·가용 자원 범위를 다시 확인합니다. 가용 자원 범위(11/10) = 투입 칸별로 자원 테이블(resources)의 대기 + 이 산불에 투입된 대수입니다(산림청 헬기 = 기지 org_type forest, 지자체 헬기 = local_lease · local, 소방 헬기 · 소방차 = fire, 진화차 = forest · local_lease · local, 정비 중 · 다른 산불 투입은 뺌). 군 · 경찰 · 미상 · 기타 · 인력처럼 자원 테이블에 없는 칸과, 그 칸 자원이 하나도 등록되지 않은 경우는 상한이 없습니다. 확인안을 만든 뒤 자원 현황이 줄어 넘게 되면 409 RESOURCE_CAPACITY_EXCEEDED입니다. 정정 행+상황 수정+로그를 먼저 한 트랜잭션으로 확정합니다. 예측이 있으면 제안 재생성 작업을 반환하고 없으면 null입니다. 제안 생성 실패는 이미 저장된 정정을 취소하지 않습니다. 작업 시작 실패 시에도 정정 저장 성공을 반환하고 proposal_stale=true, proposal_operation=null로 안내한 뒤 PROP-05로 재시도합니다.
 
 **주요 오류:** 409 INCIDENT_ENDED / STALE_SITUATION / RESOURCE_CAPACITY_EXCEEDED, 422 INVALID_CONFIRMATION_TOKEN / EXPIRED_CONFIRMATION_TOKEN
 
@@ -4945,6 +5008,21 @@ R = Σ(포함 변수의 원가중치 × 등급) ÷ Σ(포함 변수의 원가중
 
 ## 10. 바뀐 내용
 
+### v0.5 보완 — AI 어시스턴트 · 상황 정정 (2026-11-10)
+
+`wfg-server` PR #24(AI-01 · AI-02 · COR-01 · COR-02 · PROP-05 구현)와 맞추고, 11/10 결정을 반영했습니다.
+
+| 변경 | 이번 반영 |
+| --- | --- |
+| QaMessage | route · sentences(문장별 citations · data_refs) · insufficient · no_evidence 추가 |
+| CitationRef | AI-01 전용. id = 「질의응답 id-k」, chunk_id = chunk_code = 근거 청크 코드, label · origin · text 추가(Evidence 칸 + k · id) |
+| CorrectionPreview · UNSUPPORTED | ignored · notes · summary · proposal_regenerates 추가, UNSUPPORTED에 ignored |
+| CorrectionChange | label · target_name 추가, village item에 pre_evac_done |
+| 헬기 미상 칸 | Situation.deployed.helicopter에 police · unknown(미상). 기관을 모르는 투입 수는 미상(헬기) · 기타(인력 · 차량), total의 남는 몫도 그 칸 몫 |
+| 자원 상한 | RESOURCE_CAPACITY_EXCEEDED 기준 = 자원 테이블의 대기 + 이 산불 투입(칸별). AI-01은 넘는 줄만 ignored, COR-01에서 다시 확인 |
+| 이벤트 | QA_NO_EVIDENCE(근거 부족 답변) · SITUATION_CORRECTED · PROPOSAL_FAILED(정정 뒤 제안서 다시 만들기 실패) — DB-설계 event_logs 예시에 추가 |
+| 남은 일 | 위기경보 격상 · 조정 메뉴(정정 항목이 아니라 별도 기능으로 — DB 칸 · API를 따로 정함) |
+
 ### v0.4 → v0.5 (2026-11-10)
 
 P1·P2 API를 서버 구현(`wfg-server` main `907bd42`)과 대조해 고쳤습니다. 성공·실패 구조는 v0.4를 따릅니다.
@@ -4988,6 +5066,7 @@ P1·P2 API를 서버 구현(`wfg-server` main `907bd42`)과 대조해 고쳤습�
 | 2026-10-30 | v0.3 | 기존 노션 API 초안(이 문서의 이전 기준) |
 | 2026-11-06 | v0.4 검토본 | main 고정 커밋의 설계 5개 재검토, 46개 API·요청/응답·규칙/지도 계약 재작성. docs/api-spec-v0.4 브랜치에 추가 |
 | 2026-11-10 | v0.5 검토본 | wfg-server main(907bd42)과 P1·P2 대조. 제안서 계약 재작성, EVD-01 삭제·WTH-01 추가, 위기경보 삭제. PR #66 병합 검토에서 Evidence/withheld null 허용, 재시도 보장 범위·DB 대조 출처를 보정 |
+| 2026-11-10 | v0.5 보완 | AI-01 · COR를 wfg-server PR #24와 맞춤(응답 칸 추가, 헬기 미상 칸, 자원 상한 기준, 이벤트 이름) |
 
 요청·응답 타입과 미결 항목을 팀에서 검토한 후 main에 병합합니다. v0.5는 docs/api-spec-v0.5 작업 브랜치에서 검토하며 다른 설계 파일은 수정하지 않습니다. 이후 API 계약을 바꾸면 관련 DTO·프론트 타입·목업 응답·서버 OpenAPI도 같은 변경에 맞춰 관리합니다.
 
