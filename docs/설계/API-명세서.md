@@ -656,16 +656,16 @@ predictions에는 성공 결과만 저장합니다. 진행·실패 상태는 Ope
 
 | 필드 | 타입 | 필수·null | 설명 |
 | --- | --- | --- | --- |
-| source | KMA_FORECAST / AWS_OBS / FIXED | 필수 | 운영 예보 / 과거 시연 관측 / 시험 고정값(v0.5, 서버 설정 WEATHER=fixed) |
+| source | KMA_STATIONS / KMA_FORECAST / AWS_OBS / FIXED | 필수 | ELMFIRE 실시간 — 관측소 격자의 발화점 칸(v0.5 보완) / 운영 예보 / 과거 시연 관측(ELMFIRE 시연 덱 포함) / 시험 고정값(v0.5, 서버 설정 WEATHER=fixed) |
 | issued_at | DateTime 또는 null | 필수·null 허용 | 예보 발표시각. 관측은 null |
-| location | object 또는 null | 필수·null 허용 | 예보 {nx: integer, ny: integer}, 관측 {stn: string}, 고정값은 null |
+| location | object 또는 null | 필수·null 허용 | 예보 {nx: integer, ny: integer}, 관측 {stn: string}, ELMFIRE 관측소 격자 · 시연 덱 {lat: number, lon: number}(발화점, v0.5 보완), 고정값은 null |
 | hours | WeatherHour[9] | 필수 | base_at을 내림한 정시부터 8시간 뒤까지, 1시간 간격 9개 |
 | hours[].at | DateTime | 필수 | 대상 정시 |
 | hours[].kind | string | 선택 | 「관측」·「예보」·「고정」·「파일」 — 0시는 관측, 뒤는 예보처럼 섞여 오므로 시간마다 표시. **한글 그대로** (v0.5) |
 | hours[].wind_dir / wind_speed | number | 필수 | 불어오는 방향 0~360° / m/s, 풍속 0 이상 |
 | hours[].temp / humidity / precip | number | 필수 | ℃ / 0~100% / 1시간 강수 mm, 강수 0 이상 |
 
-시간별 기상은 서버가 선택합니다. 기압·지면온도·시정·특보는 예측 weather에 추가하지 않습니다. 한 지점 값을 전체 범위에 적용하는 한계를 표시합니다.
+시간별 기상은 서버가 선택합니다. 기압·지면온도·시정·특보는 예측 weather에 추가하지 않습니다. 한 지점 값을 전체 범위에 적용하는 한계를 표시합니다(KMA_FORECAST). **ELMFIRE 예측(KMA_STATIONS · 시연 AWS_OBS, v0.5 보완)**은 관측소 여러 곳을 600 m 격자로 보간해 계산하고, 이 값은 그 격자의 **발화점 칸 9시간**입니다 — 규칙 판정·화면이 확산 계산과 같은 바람을 봅니다. wind_speed는 늘 평균풍속입니다(대응단계 풍속 기준과 같은 정의).
 
 **DTO Example**
 
@@ -2579,7 +2579,7 @@ expected_perimeter_id: ID 필수
 }
 ```
 
-**처리 규칙:** 최신 유효 화선만 대상으로 하며 과거 화선 지정 실행은 허용하지 않습니다. 서버가 기상 지점을 선택하고 base_at=observed_at으로 고정합니다. **v0.5: 기상은 요청 때 먼저 받습니다**(서버 설정의 원천에서 9시간). 못 받으면 작업을 만들지 않고 503 WEATHER_UNAVAILABLE이며, 받은 기상은 예측에 넘기고 predictions.weather로 저장해 규칙·제안도 같은 값을 씁니다. 예측→P1~P8→위험도→규칙→근거→제안 계산 후 최종 결과를 한 트랜잭션으로 저장합니다. 실패 시 직전 예측·제안이 유지됩니다. 계산 중 새 화선·정정 발생 시 오래된 결과를 최신으로 커밋하지 않도록 재검사합니다. **v0.5 결정(Q-01 일부)**: 위험도를 못 구해도 예측·제안은 저장합니다(RISK-01만 data: null). 근거 검색은 제안 작성(PROPOSAL_GENERATION) 안에서 함께 합니다. 작업 저장소는 Q-05에서 확정합니다(v0.5 서버는 메모리).
+**처리 규칙:** 최신 유효 화선만 대상으로 하며 과거 화선 지정 실행은 허용하지 않습니다. 서버가 기상 지점을 선택하고 base_at=observed_at으로 고정합니다. **v0.5: 기상은 요청 때 먼저 받습니다**(서버 설정의 원천에서 9시간). 못 받으면 작업을 만들지 않고 503 WEATHER_UNAVAILABLE이며, 받은 기상은 예측에 넘기고 predictions.weather로 저장해 규칙·제안도 같은 값을 씁니다. **ELMFIRE 예측(v0.5 보완)**도 요청 때 기상 입력(관측소 격자 — 실시간 또는 시연)을 만들고, 남은 관측소가 3곳 미만이거나 시연 기상에 없는 시각이면 같은 503입니다(다른 기상으로 대신하지 않음). 이때 predictions.weather = 그 격자의 발화점 칸 9시간. 예측→P1~P8→위험도→규칙→근거→제안 계산 후 최종 결과를 한 트랜잭션으로 저장합니다. 실패 시 직전 예측·제안이 유지됩니다. 계산 중 새 화선·정정 발생 시 오래된 결과를 최신으로 커밋하지 않도록 재검사합니다. **v0.5 결정(Q-01 일부)**: 위험도를 못 구해도 예측·제안은 저장합니다(RISK-01만 data: null). 근거 검색은 제안 작성(PROPOSAL_GENERATION) 안에서 함께 합니다. 작업 저장소는 Q-05에서 확정합니다(v0.5 서버는 메모리).
 
 **주요 오류:** 409 INCIDENT_ENDED / PREDICTION_RUNNING / STALE_PERIMETER, 503 WEATHER_UNAVAILABLE
 
@@ -5008,6 +5008,18 @@ R = Σ(포함 변수의 원가중치 × 등급) ÷ Σ(포함 변수의 원가중
 <a id="changes"></a>
 
 ## 10. 바뀐 내용
+
+### v0.5 보완 — ELMFIRE 기상 (2026-11-11)
+
+`wfg-server` PR #36(ELMFIRE 기상 입력 · 출처 실시간 stations · 시연 deck)과 맞췄습니다. 응답 모양(칸)은 그대로이고 값만 늘었습니다.
+
+| 변경 | 이번 반영 |
+| --- | --- |
+| Weather.source | `KMA_STATIONS` 추가 — ELMFIRE 실시간(관측소 매분자료 + 단기예보 → 600 m 격자)의 발화점 칸 값. ELMFIRE 시연(덱에 든 의성 관측 기상)은 기존 `AWS_OBS` |
+| Weather.location | `{lat, lon}`(발화점) 추가 — KMA_STATIONS · 시연 AWS_OBS |
+| PRED-01 | ELMFIRE 기상 입력도 요청 때 만듦. 관측소 3곳 미만 · 시연 기상에 없는 시각 → 503 WEATHER_UNAVAILABLE(대체 없음) |
+| 저장 기상의 바람 | wind_speed = 평균풍속(대응단계 3 · 11 m/s 기준과 같은 정의). ELMFIRE 입력값(시간 안 가장 센 1분 풍속)은 DB에만 두고 응답(PRED-04)에 내지 않음 |
+| hours[].kind | 값은 그대로(「관측」·「예보」). 0시는 섞인 값 중 실제로 잰 값의 비중이 절반 이상이면 「관측」 |
 
 ### v0.5 보완 — AI 어시스턴트 · 상황 정정 (2026-11-10)
 
