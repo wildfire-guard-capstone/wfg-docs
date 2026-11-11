@@ -1593,16 +1593,19 @@ current_stage·official_stage·기상·진화예상시간·부상·고립·자�
 | 필드 | 타입 | 필수·null | 설명 |
 | --- | --- | --- | --- |
 | prediction_id | ID | 필수 | 기준 예측 |
-| status | READY / PARTIAL / UNAVAILABLE | 필수 | 23개 전부 계산 / 일부 제외 / 산출 불가, API 제안 |
-| score | number 또는 null | 필수·null 허용 | R 1.00~5.00, 산출 불가면 null |
+| status | READY / PARTIAL / UNAVAILABLE | 필수 | 25개 전부 계산 / 일부 제외 / 산출 불가(위해 H를 못 구하면) |
+| score | number 또는 null | 필수·null 허용 | R = √(hazard × exposure), 1.00~5.00. exposure가 null이면 R = hazard, 산출 불가면 null(7.2) |
+| hazard | number 또는 null | 필수·null 허용 | **v0.5 보완(11/12)** 위해 H: weather · terrain · fuel · scale 변수의 가중평균(1~5) |
+| exposure | number 또는 null | 필수·null 허용 | **v0.5 보완(11/12)** 노출 X: infrastructure · exposure 변수의 가중평균(1~5) |
+| combine | string | 필수 | **v0.5 보완(11/12)** 결합식. `sqrt_hx`(R = √(H × X)) |
 | grade | string 또는 null | 필수·null 허용 | 표시 등급 구간 미확정. 합의 전 null |
-| axes | object | 필수 | terrain·fuel·weather·infrastructure 각각 number 또는 null. 축별 가용 변수의 가중평균 제안 |
-| included_weight_sum | number | 필수 | 실제로 계산에 포함한 CSV 원가중치 합 |
-| factors | RiskFactor[] | 필수 | 실구현 시 23개 항목 모두 반환, 미계산 항목도 사유와 함께 |
-| method_version | string 또는 null | 필수·null 허용 | 계산 기준 판, 저장 방식과 함께 확정 |
+| axes | object | 필수 | terrain·fuel·weather·infrastructure·scale·exposure 각각 number 또는 null. 축별 가용 변수의 가중평균 |
+| included_weight_sum | number | 필수 | 실제로 계산에 포함한 원가중치 합(25개 전부면 1.14) |
+| factors | RiskFactor[] | 필수 | 25개 항목 모두 반환, 미계산 항목도 사유와 함께 |
+| method_version | string 또는 null | 필수·null 허용 | 계산 기준 판. `risk-2` = 7.2의 √(H × X)(이전 `risk-1` = 23개 가중평균) |
 | unavailable_reasons | string[] | 필수 | 미산출·부분산출 이유 |
 
-이 예시의 빈 factors는 미구현·미합의 상태 예시입니다. 실제 완료 응답은 누락 변수를 포함한 23개를 반환해야 합니다. 실제 점수·등급·저장 완료를 보장하는 명세가 아닙니다(Q-01).
+이 예시는 산출 불가(UNAVAILABLE) 응답입니다. 실제 응답은 누락 변수를 포함한 25개를 반환합니다. 실제 점수·등급·저장 완료를 보장하는 명세가 아닙니다(Q-01).
 
 **DTO Example**
 
@@ -1611,12 +1614,17 @@ current_stage·official_stage·기상·진화예상시간·부상·고립·자�
   "prediction_id": "41",
   "status": "UNAVAILABLE",
   "score": null,
+  "hazard": null,
+  "exposure": null,
+  "combine": "sqrt_hx",
   "grade": null,
   "axes": {
     "terrain": null,
     "fuel": null,
     "weather": null,
-    "infrastructure": null
+    "infrastructure": null,
+    "scale": null,
+    "exposure": null
   },
   "included_weight_sum": 0,
   "factors": [],
@@ -1634,12 +1642,12 @@ current_stage·official_stage·기상·진화예상시간·부상·고립·자�
 
 | 필드 | 타입 | 필수·null | 설명 |
 | --- | --- | --- | --- |
-| code / name / axis | string | 필수 | 변수 코드·한글 이름·4축 중 하나. 7절 목록 |
+| code / name / axis | string | 필수 | 변수 코드·한글 이름·6축 중 하나. 7.2 목록 |
 | raw_value | number 또는 string 또는 null | 필수·null 허용 | 원값 |
 | grade | number 또는 null | 필수·null 허용 | 1~5, 산출 불가면 null. 칸 등급을 면적·시각으로 평균해 소수일 수 있음(v0.5 보완) |
-| weight | number | 필수 | CSV 원가중치 |
+| weight | number | 필수 | 원가중치(AI Hub CSV 23개 + 팀 추가 2개, 7.2) |
 | included | boolean | 필수 | 이번 계산에 실제 포함 여부 |
-| contribution | number 또는 null | 필수·null 허용 | weight × grade ÷ included_weight_sum, 분모가 0이면 null |
+| contribution | number 또는 null | 필수·null 허용 | 자기 묶음 점수에 대한 기여: weight × grade ÷ (같은 묶음 H 또는 X에서 포함된 가중치 합), 분모가 0이면 null. 묶음 안 합 = hazard 또는 exposure |
 | reason | string 또는 null | 필수·null 허용 | 미포함·대체값 사유 |
 | source / value_at | string 또는 null / DateTime 또는 null | 필수·null 허용 | 자료·대체 관측 출처와 대상시각 |
 
@@ -3004,12 +3012,17 @@ expected_perimeter_id: ID 필수, mode: PredictionMode 또는 null 선택(v0.5 �
     "prediction_id": "41",
     "status": "UNAVAILABLE",
     "score": null,
+    "hazard": null,
+    "exposure": null,
+    "combine": "sqrt_hx",
     "grade": null,
     "axes": {
       "terrain": null,
       "fuel": null,
       "weather": null,
-      "infrastructure": null
+      "infrastructure": null,
+      "scale": null,
+      "exposure": null
     },
     "included_weight_sum": 0,
     "factors": [],
@@ -3024,7 +3037,7 @@ expected_perimeter_id: ID 필수, mode: PredictionMode 또는 null 선택(v0.5 �
 }
 ```
 
-**처리 규칙:** 미산출을 0 또는 안전 등급으로 채우지 않습니다. **v0.5 보완(서버 구현)**: 부를 때마다 계산하고 저장하지 않습니다. 구하지 못한 변수는 빼고 남은 가중치로 다시 나눠 `PARTIAL`, 하나도 못 구하면 `UNAVAILABLE`(score null)이며 빠진 이유는 unavailable_reasons에 묶어 줍니다. 전체 grade는 등급 구간 합의 전 null입니다. 종료된 산불도 계산합니다(저장 · 종료 후 정책은 Q-01).
+**처리 규칙:** 미산출을 0 또는 안전 등급으로 채우지 않습니다. **v0.5 보완(서버 구현)**: 부를 때마다 계산하고 저장하지 않습니다. **v0.5 보완(11/12)**: 계산식은 7.2의 R = √(위해 H × 노출 X)입니다. 구하지 못한 변수는 빼고 그 묶음 안 남은 가중치로 다시 나눠 `PARTIAL`, 위해 H를 못 구하면 `UNAVAILABLE`(score null)이며 빠진 이유는 unavailable_reasons에 묶어 줍니다. 전체 grade는 등급 구간 합의 전 null입니다. 종료된 산불도 계산합니다(저장 · 종료 후 정책은 Q-01).
 
 **주요 오류:** 공통 401·403·404 오류를 적용합니다(v0.5 보완: RISK_POLICY_PENDING · RISK_UNAVAILABLE은 서버가 쓰지 않음).
 
@@ -4964,12 +4977,22 @@ name·organization·role·admin_area_id 중 1개 이상, 타입은 발급과 동
 
 > v0.5: v0.4의 7.2 targets → 지도 연결 · 7.3 제안 detail.facts 해석 · 7.4 E4 대피소 후보 · 7.5 E5 도로·E6 전파 구분은 삭제했습니다. 제안서 응답에 규칙 판정의 facts·targets를 넣지 않고(지도 강조는 MVP 제외), 항목도 12개(S1~S6·E1~E6)로 바뀌었습니다. 대피소 후보·도로 통제 같은 내용은 해당 항목의 sections(목록·표)에 글로 들어 있습니다.
 
-### 7.2 위험도 23개 변수
+### 7.2 위험도 25개 변수
 
-R = Σ(포함 변수의 원가중치 × 등급) ÷ Σ(포함 변수의 원가중치). 모든 변수가 있으면 분모는 **0.94**입니다. 빠진 변수를 제외할 때 0.94로 고정해서 나누지 않습니다. 포함 가중치 합이 0이면 score=null입니다. 등급은 변수별 1~5, 최종 R은 1~5이며 화면에서 소수 둘째 자리로 표시하는 안입니다. 기여도 합은 score와 일치해야 합니다.
+**v0.5 보완(11/12, method_version `risk-2`)**: 위험도는 위해(H)와 노출(X)을 나눠 구한 뒤 기하평균합니다. 재해 위험 = 위해 × 노출(× 취약성)이라는 표준 정의(UNDRR)를 따른 것으로, 사람 · 집이 없으면 조건이 나빠도 위험도가 낮고, 불이 커질수록 위험도가 올라가게 하기 위함입니다(근거 · 실험: wfg-server `risk/README.md`).
 
+```text
+H(위해) = Σ(가중치 × 등급) ÷ Σ가중치   weather · terrain · fuel 21개 + scale(산불 규모) — 포함된 변수만
+X(노출) = Σ(가중치 × 등급) ÷ Σ가중치   infrastructure 2개 + exposure(주변 주택 수) — 포함된 변수만
+R = √(H × X)                          H · X · R 모두 1~5. X가 없으면 R = H, H가 없으면 score = null
+```
 
-| API 변수 코드(제안) | 원문 변수 | 축 | CSV 원가중치 |
+- 빠진 변수는 그 묶음의 분모에서도 뺍니다(고정 분모로 나누지 않음). 등급은 변수별 1~5(면적 · 시각 평균이라 소수 가능), 화면은 소수 둘째 자리.
+- 묶음 안 기여도(contribution) 합은 hazard 또는 exposure와 같습니다. 화면의 가중치는 묶음 안 비율(묶음마다 합 1)로 보입니다.
+- 노출 범위: 취약계층 수 · 주변 주택 수는 **P5 + 1 km** 안에서 셉니다. 취약계층은 리 인원 × 그 리 주택 중 범위 안 비율(주택 점이 없는 리는 겹친 면적 비율).
+- 이전 정의(`risk-1`): 23개를 한 번에 가중평균(분모 0.94). 위해 비중이 80%라 사람 · 집 유무와 불 크기가 거의 반영되지 않아 바꿨습니다.
+
+| API 변수 코드 | 원문 변수 | 축(묶음) | 원가중치 |
 | --- | --- | --- | --- |
 | slope_up | 경사도_up | terrain | 0.08 |
 | aspect | 사면방향 | terrain | 0.06 |
@@ -4994,6 +5017,10 @@ R = Σ(포함 변수의 원가중치 × 등급) ÷ Σ(포함 변수의 원가중
 | fuel_moisture | 수분함량 | fuel | 0.06 |
 | vulnerable_population | 취약계층 수 | infrastructure | 0.04 |
 | fire_station_distance | 소방서와의 거리 | infrastructure | 0.03 |
+| fire_area | 산불 규모(P5 면적) | scale | 0.15 |
+| houses_nearby | 주변 주택 수(P5 + 1 km) | exposure | 0.05 |
+
+축 묶음: weather · terrain · fuel · scale → H, infrastructure · exposure → X. 위 23개는 AI Hub CSV 원가중치(합 0.94), 아래 2개는 팀 추가(11/10). 추가 변수 등급: 산불 규모 = 2 + log10(ha ÷ 10)(10 ha → 2, 100 ha → 3, 1,000 ha → 4; 산림청 대응단계 10 · 100 ha 기준), 주변 주택 수 = 1 + log10(1 + 채)(1~5로 자름).
 
 등급 구간은 [위험도 정리](https://github.com/wildfire-guard-capstone/wfg-docs/blob/43dc969703cdb65192e07e1341785ce38bca60c6/docs/설계/위험도-정리.md)에 적힌 원표를 기준으로 하되, 등호 경계 중복·변환식·시간/격자 기준은 Q-01에서 정해야 합니다. 미확보였던 소방서·수계 자료를 현재도 전부 없다고 단정하지 않습니다. 최신 지도·자원 문서의 확보 상태와 계산 가능 여부를 각각 확인합니다. 기압·지면온도를 관측값으로 보완할 때 예측 시점의 실제 값처럼 표시하지 않습니다.
 
@@ -5054,6 +5081,17 @@ R = Σ(포함 변수의 원가중치 × 등급) ÷ Σ(포함 변수의 원가중
 <a id="changes"></a>
 
 ## 10. 바뀐 내용
+
+### v0.5 보완 — 위험도 새 정의 (2026-11-12)
+
+wfg-server PR #46 · wfg-client PR #4(main 병합, 배포)와 맞췄습니다. **RISK-01 응답 모양이 바뀝니다.**
+
+| 곳 | 이번 반영 |
+| --- | --- |
+| 7.2 | 23개 가중평균 → R = √(위해 H × 노출 X), 변수 25개(산불 규모 0.15 · 주변 주택 수 0.05 추가), 노출 범위 P5 + 1 km |
+| Risk | hazard · exposure · combine 추가, axes에 scale · exposure, factors 25개, method_version risk-2 |
+| RiskFactor | axis 6개, contribution = 자기 묶음(H 또는 X) 점수에 대한 기여 |
+| RISK-01 | 처리 규칙에 새 식 반영(H를 못 구하면 UNAVAILABLE, X가 없으면 R = H) |
 
 ### v0.5 보완 — 서버와 맞춤 (2026-11-11)
 
@@ -5146,7 +5184,7 @@ P1·P2 API를 서버 구현(`wfg-server` main `907bd42`)과 대조해 고쳤습�
 | E5 | 대피로/진입로 충돌 대신 P0~P5 큰 도로 통제 구간·도달 시각·가까운 경찰서 |
 | S1·S6 | 지휘권 인계는 S1, S6는 타 항목의 요청을 모아 대책회의·기관 협조 안내 |
 | E6·E7 | 읍면별 Go/Set·직전 대비 변화, 이미 닿고 대피 완료 보고 없는 마을의 가까운 소방서 |
-| 위험도 | 23개 변수·가용 가중치·결측·저장 공백·종료 정책을 분리해 조건부 API로 표시 |
+| 위험도 | 23개 변수·가용 가중치·결측·저장 공백·종료 정책을 분리해 조건부 API로 표시(v0.5 보완 11/12: 25개 · √(H × X)) |
 | 검토 목록 | 과거 '미확보' 항목의 일괄 나열 대신 현재 미결과 API 구현 합의 10개로 갱신 |
 
 ### 변경 이력
@@ -5160,6 +5198,7 @@ P1·P2 API를 서버 구현(`wfg-server` main `907bd42`)과 대조해 고쳤습�
 | 2026-11-11 | v0.5 보완 | ELMFIRE 기상(Weather source KMA_STATIONS · location, wfg-server PR #36) · 예측 모드(PRED-01 mode, PRED-05 result.mode · predictor, PR #40) |
 | 2026-11-11 | v0.5 보완 | 서버와 맞춤 — 공통 오류 코드 표, RISK-01 구현 반영, 오류 목록 정리, 11/11 확정 규칙(화선 관측 시각 · 계정 · 자원 · 지도), LOG-01 기간 미구현 표시 |
 | 2026-11-11 | v0.5 보완 | PRED-03 Feature id = `{prediction_id}-{hour}`(서버 형식) |
+| 2026-11-12 | v0.5 보완 | 위험도 새 정의 — R = √(H × X), 변수 25개, Risk hazard · exposure · combine(wfg-server PR #46 · wfg-client PR #4) |
 
 요청·응답 타입과 미결 항목을 팀에서 검토한 후 main에 병합합니다. v0.5는 docs/api-spec-v0.5 작업 브랜치에서 검토하며 다른 설계 파일은 수정하지 않습니다. 이후 API 계약을 바꾸면 관련 DTO·프론트 타입·목업 응답·서버 OpenAPI도 같은 변경에 맞춰 관리합니다.
 
