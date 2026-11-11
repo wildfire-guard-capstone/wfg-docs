@@ -139,6 +139,21 @@
 
 오류 `fields`는 배열이며 필드 오류가 없으면 []입니다. 각 API에는 위 공통 오류 외에 주요 업무 오류를 적었습니다. 프론트는 HTTP 상태와 error.code를 함께 처리합니다.
 
+**공통 오류 코드(v0.5 보완, 서버 구현)** — 모든 오류에 한국어 `message`가 함께 옵니다. 모르는 코드는 `message`를 그대로 보여 주면 됩니다.
+
+| HTTP 상태 | error.code | 언제 |
+| --- | --- | --- |
+| 400 | BAD_REQUEST | 요청 본문이 올바른 JSON이 아님 |
+| 401 | UNAUTHORIZED | 로그인 토큰 없음 |
+| 401 | TOKEN_EXPIRED | 토큰 만료(30분) — 다시 로그인 |
+| 401 | INVALID_TOKEN | 토큰 무효(서명 · 형식) |
+| 403 | FORBIDDEN_ROLE | 역할이 이 API의 권한 밖 |
+| 403 | ACCOUNT_UNAVAILABLE | 잠기거나 회수된 계정 |
+| 404 | NOT_FOUND | 대상 없음 또는 권한 범위 밖 |
+| 422 | VALIDATION_ERROR | 필수 · 형식 · 범위 검증 실패(`fields`에 칸별 이유) |
+| 422 | INVALID_CURSOR | 서버가 준 `next_cursor`가 아님 |
+| 500 | INTERNAL_ERROR | 예상하지 못한 오류 |
+
 ### 2.4 중복·동시 작업 — 구현 합의 필요
 
 - INC-02, PER-02, PER-03, PRED-01, COR-01, PROP-05에는 `Idempotency-Key`(요청별 UUID 문자열)를 필수로 제안합니다. 네트워크 재시도는 같은 키·같은 본문, 새 사용자 동작은 새 키입니다.
@@ -775,7 +790,7 @@ predictions에는 성공 결과만 저장합니다. 진행·실패 상태는 Ope
 | status | OperationStatus | 필수 | QUEUED / RUNNING / SUCCEEDED / FAILED |
 | stage | string 또는 null | 필수·null 허용 | SPREAD / RISK / RULES / PROPOSAL_GENERATION / COMMIT. v0.5 서버는 EVIDENCE를 내지 않음(근거 검색이 PROPOSAL_GENERATION 안에서 같이 돎) |
 | result | object 또는 null | 필수·null 허용 | 성공 때 prediction_id·proposal_id 반환. 정정 관련 작업은 correction_id도 가능. 예측 작업(PREDICTION)은 mode(요청한 PredictionMode, null = 서버 기본)·predictor(실제로 쓴 예측 synthetic·file·elmfire)도 반환 (v0.5 보완) |
-| error | object 또는 null | 필수·null 허용 | 실패 때 code·message. HTTP 오류와 같은 코드 체계. v0.5 서버 코드: 커밋 직전 재검사 `STALE_PERIMETER`·`INCIDENT_ENDED`, 계산 실패 `PREDICTION_INVALID`(예측 결과 검사 실패)·`PROPOSAL_FAILED`(규칙·제안 단계)·`INTERNAL_ERROR` — **이름 확인 필요** |
+| error | object 또는 null | 필수·null 허용 | 실패 때 code·message. HTTP 오류와 같은 코드 체계. v0.5 서버 코드: 커밋 직전 재검사 `STALE_PERIMETER`·`INCIDENT_ENDED`, 계산 실패 `PREDICTION_INVALID`(예측 결과 검사 실패)·`PROPOSAL_FAILED`(규칙·제안 단계)·`INTERNAL_ERROR` (v0.5 보완: 서버 코드대로 확정) |
 
 작업 큐·보존기간·재시작 후 복구는 Q-05에서 확정해야 합니다. 서버 구현 없이 메모리 작업만으로 운영 계약이 충족됐다고 보지 않습니다.
 
@@ -1621,7 +1636,7 @@ current_stage·official_stage·기상·진화예상시간·부상·고립·자�
 | --- | --- | --- | --- |
 | code / name / axis | string | 필수 | 변수 코드·한글 이름·4축 중 하나. 7절 목록 |
 | raw_value | number 또는 string 또는 null | 필수·null 허용 | 원값 |
-| grade | integer 또는 null | 필수·null 허용 | 1~5, 산출 불가면 null |
+| grade | number 또는 null | 필수·null 허용 | 1~5, 산출 불가면 null. 칸 등급을 면적·시각으로 평균해 소수일 수 있음(v0.5 보완) |
 | weight | number | 필수 | CSV 원가중치 |
 | included | boolean | 필수 | 이번 계산에 실제 포함 여부 |
 | contribution | number 또는 null | 필수·null 허용 | weight × grade ÷ included_weight_sum, 분모가 0이면 null |
@@ -2231,7 +2246,7 @@ expected_perimeter_id: ID 필수(현재 화선과 대조하는 API 제안)
 }
 ```
 
-**처리 규칙:** 종료 후 새 화선 보고·정정, 예측, 상황 정정, 제안 재생성을 막습니다. 저장 중인 예측 작업과 같은 산불별 잠금으로 순서를 보장하고 종료 전 대기 작업은 커밋 직전 재검사합니다. 종료 후 기존 제안 조회와 질문은 허용합니다. **v0.5 결정**: 종료하면 그 산불에 투입된 자원(resources.deployed_incident_id)을 자동으로 풀어 줍니다(status AVAILABLE, 연결 null) — 서버 반영 예정.
+**처리 규칙:** 종료 후 새 화선 보고·정정, 예측, 상황 정정, 제안 재생성을 막습니다. 저장 중인 예측 작업과 같은 산불별 잠금으로 순서를 보장하고 종료 전 대기 작업은 커밋 직전 재검사합니다. 종료 후 기존 제안 조회와 질문은 허용합니다. **v0.5 결정**: 종료하면 그 산불에 투입된 자원(resources.deployed_incident_id)을 자동으로 풀어 줍니다(status AVAILABLE, 연결 null). v0.5 보완(서버 반영): 풀어 준 자원마다 RESOURCE_UPDATED(details.op = released), INCIDENT_ENDED details에 released_resource_ids.
 
 **주요 오류:** 409 INCIDENT_ENDED / RESOURCE_BUSY / STALE_PERIMETER
 
@@ -2420,9 +2435,9 @@ geometry: Polygon 또는 MultiPolygon(MultiPolygon으로 저장), observed_at: D
 }
 ```
 
-**처리 규칙:** 다음 version_no로 INSERT합니다. **v0.5: 대응단계는 판정하지 않습니다**(다음 예측 때 판정). 예측은 자동 실행하지 않습니다. 구멍·자기 교차·빈 도형을 검증하며 새 실측 화선은 이전 예측 범위를 포함할 의무가 없습니다. 관측 시각이 현재 화선보다 앞서거나 5분 넘게 미래면 v0.5 서버는 422 INVALID_OBSERVED_AT으로 거절합니다(확인 필요, Q-02).
+**처리 규칙:** 다음 version_no로 INSERT합니다. **v0.5: 대응단계는 판정하지 않습니다**(다음 예측 때 판정). 예측은 자동 실행하지 않습니다. 구멍·자기 교차·빈 도형을 검증하며 새 실측 화선은 이전 예측 범위를 포함할 의무가 없습니다. 관측 시각이 현재 화선보다 앞서거나 5분 넘게 미래면 422 INVALID_OBSERVED_AT으로 거절합니다(v0.5 보완 확정, 같은 시각은 받음).
 
-**주요 오류:** 409 INCIDENT_ENDED / STALE_PERIMETER, 422 INVALID_GEOMETRY / INVALID_OBSERVED_AT(확인 필요)
+**주요 오류:** 409 INCIDENT_ENDED / STALE_PERIMETER, 422 INVALID_GEOMETRY / INVALID_OBSERVED_AT
 
 <a id="per-03"></a>
 
@@ -2526,9 +2541,9 @@ geometry: Polygon 또는 MultiPolygon(MultiPolygon으로 저장), observed_at: D
 }
 ```
 
-**처리 규칙:** URL의 perimeter_id가 현재 유효한 v1 이상이어야 합니다. 기존 행 corrected_at과 다음 번호 새 행을 한 트랜잭션으로 처리합니다(v0.5: 대응단계는 다음 예측 때 판정). 정정한 화선의 관측 시각이 직전 화선보다 앞서면 422 INVALID_OBSERVED_AT(확인 필요). v0 정정은 금지합니다. 과거 예측과 제안은 보존하고 이력에서 기준 화선 정정 여부를 표시합니다.
+**처리 규칙:** URL의 perimeter_id가 현재 유효한 v1 이상이어야 합니다. 기존 행 corrected_at과 다음 번호 새 행을 한 트랜잭션으로 처리합니다(v0.5: 대응단계는 다음 예측 때 판정). 정정한 화선의 관측 시각이 직전 화선(정정 대상의 바로 앞 버전)보다 앞서거나 5분 넘게 미래면 422 INVALID_OBSERVED_AT(v0.5 보완 확정 — 기준이 직전 화선이라 잘못 적은 관측 시각도 고칠 수 있음). v0 정정은 금지합니다. 과거 예측과 제안은 보존하고 이력에서 기준 화선 정정 여부를 표시합니다.
 
-**주요 오류:** 409 INCIDENT_ENDED / STALE_PERIMETER, 422 V0_NOT_CORRECTABLE / INVALID_OBSERVED_AT(확인 필요)
+**주요 오류:** 409 INCIDENT_ENDED / STALE_PERIMETER, 422 V0_NOT_CORRECTABLE / INVALID_OBSERVED_AT
 
 <a id="pred-01"></a>
 
@@ -2953,7 +2968,7 @@ expected_perimeter_id: ID 필수, mode: PredictionMode 또는 null 선택(v0.5 �
 }
 ```
 
-**처리 규칙:** 2초 간격 조회를 제안합니다. 완료는 SUCCEEDED/FAILED로 끝나며 HTTP 200 응답 안에서 작업 실패를 구분합니다. operation은 요청 사용자·산불에 결합하고 보존기간은 Q-05에서 확정합니다. v0.5 서버의 FAILED error.code는 Operation DTO 참고(이름 확인 필요). ELMFIRE(LIVE·DEMO_ELMFIRE)는 화선이 덱 범위 밖 등 입력 문제면 PREDICTION_INVALID, 시간 초과(5분)·실행 실패·실행 컨테이너 연결 실패면 INTERNAL_ERROR입니다(v0.5 보완). 작업 기록이 서버 메모리라 서버를 다시 켜면 진행 중이던 작업도 404입니다(Q-05).
+**처리 규칙:** 2초 간격 조회를 제안합니다. 완료는 SUCCEEDED/FAILED로 끝나며 HTTP 200 응답 안에서 작업 실패를 구분합니다. operation은 요청 사용자·산불에 결합하고 보존기간은 Q-05에서 확정합니다. FAILED error.code는 Operation DTO 참고(v0.5 보완 확정). ELMFIRE(LIVE·DEMO_ELMFIRE)는 화선이 덱 범위 밖 등 입력 문제면 PREDICTION_INVALID, 시간 초과(5분)·실행 실패·실행 컨테이너 연결 실패면 INTERNAL_ERROR입니다(v0.5 보완). 작업 기록이 서버 메모리라 서버를 다시 켜면 진행 중이던 작업도 404입니다(Q-05).
 
 **주요 오류:** 공통 401·403·404·422·500 오류를 적용합니다.
 
@@ -3009,9 +3024,9 @@ expected_perimeter_id: ID 필수, mode: PredictionMode 또는 null 선택(v0.5 �
 }
 ```
 
-**처리 규칙:** 계산 방식·저장소가 합의된 뒤 구현하는 조건부 API입니다. 미산출을 0 또는 안전 등급으로 채우지 않습니다. 종료된 산불의 조회 허용 여부는 Q-01에서 결정하며, 구현 전 임의로 차단/허용을 확정하지 않습니다.
+**처리 규칙:** 미산출을 0 또는 안전 등급으로 채우지 않습니다. **v0.5 보완(서버 구현)**: 부를 때마다 계산하고 저장하지 않습니다. 구하지 못한 변수는 빼고 남은 가중치로 다시 나눠 `PARTIAL`, 하나도 못 구하면 `UNAVAILABLE`(score null)이며 빠진 이유는 unavailable_reasons에 묶어 줍니다. 전체 grade는 등급 구간 합의 전 null입니다. 종료된 산불도 계산합니다(저장 · 종료 후 정책은 Q-01).
 
-**주요 오류:** 409 RISK_POLICY_PENDING (종료 후 정책 미확정 시), 503 RISK_UNAVAILABLE (조회 기능 미구현 시)
+**주요 오류:** 공통 401·403·404 오류를 적용합니다(v0.5 보완: RISK_POLICY_PENDING · RISK_UNAVAILABLE은 서버가 쓰지 않음).
 
 <a id="wth-01"></a>
 
@@ -3282,9 +3297,9 @@ expected_perimeter_id: ID 필수, mode: PredictionMode 또는 null 선택(v0.5 �
 }
 ```
 
-**처리 규칙:** entity_type은 village / facility / map_feature / resource_base / admin_area입니다. 제안 targets와 연결합니다. REPORTER는 보고 지도용 허용 종류·범위만 조회하며 기지·분석 범위는 Q-08에서 합의합니다. 동적 노선 구간은 원본 map_feature ID 여러 개로 강조합니다.
+**처리 규칙:** entity_type은 village / facility / map_feature / resource_base / admin_area입니다. 제안 targets와 연결합니다. REPORTER는 보고 지도용 허용 종류·범위만 조회하며 기지·분석 범위는 Q-08에서 합의합니다(v0.5 보완: REPORTER가 resource_base를 부르면 403 FORBIDDEN_ROLE — BASE-01과 같은 범위). 행정구역은 도형 없이 줍니다(경계는 MAP-02). 동적 노선 구간은 원본 map_feature ID 여러 개로 강조합니다.
 
-**주요 오류:** 공통 401·403·404·422·500 오류를 적용합니다.
+**주요 오류:** 403 FORBIDDEN_ROLE, 422 UNKNOWN_ENTITY_TYPE(위 다섯 종류 밖)
 
 <a id="map-04"></a>
 
@@ -3340,7 +3355,7 @@ expected_perimeter_id: ID 필수, mode: PredictionMode 또는 null 선택(v0.5 �
 }
 ```
 
-**처리 규칙:** 법정동코드 10자리를 숫자로 변환하지 않습니다. 관할 계정은 보고용 읍면과 필요한 상위 범위를, ADMIN은 계정·기지 관할 선택에 필요한 전국 범위를 조회하는 안입니다.
+**처리 규칙:** 법정동코드 10자리를 숫자로 변환하지 않습니다. 관할 계정은 자기 시군구 · 그 위 시도 · 그 아래 읍면동을, ADMIN은 계정·기지 관할 선택에 필요한 전국 범위를 조회합니다(v0.5 보완 확정).
 
 **주요 오류:** 공통 401·403·404·422·500 오류를 적용합니다.
 
@@ -3536,9 +3551,9 @@ Resource의 id를 제외한 kind·name·base_id 필수, status 생략 시 AVAILA
 }
 ```
 
-**처리 규칙:** 헬기·차량 1대씩 등록합니다. base_id 존재 확인, name 유일, capacity_l은 있으면 0 이상 숫자입니다. 등록·수정·삭제는 RESOURCE_UPDATED 이벤트로 기록합니다.
+**처리 규칙:** 헬기·차량 1대씩 등록합니다. base_id 존재 확인, name 유일, capacity_l은 있으면 0 이상 숫자입니다. 등록·수정·삭제는 RESOURCE_UPDATED 이벤트로 기록합니다. v0.5 보완: deployed_incident_id가 없거나 종료된 산불이면 422 VALIDATION_ERROR(field deployed_incident_id).
 
-**주요 오류:** 409 DUPLICATE_RESOURCE_NAME, 422 INVALID_BASE
+**주요 오류:** 409 DUPLICATE_RESOURCE_NAME, 422 INVALID_BASE / VALIDATION_ERROR
 
 <a id="res-04"></a>
 
@@ -3591,9 +3606,9 @@ kind·name·base_id·status·attrs·deployed_incident_id 중 1개 이상(v0.5: s
 }
 ```
 
-**처리 규칙:** attrs를 보내면 객체 전체를 교체합니다. resources에 없는 org_type·관할·실시간 위치는 수정할 수 없습니다. 서버 동시 편집 보호 방식은 Q-09에서 확정합니다.
+**처리 규칙:** attrs를 보내면 객체 전체를 교체합니다. resources에 없는 org_type·관할·실시간 위치는 수정할 수 없습니다. 서버 동시 편집 보호 방식은 Q-09에서 확정합니다(v0.5 서버는 동시 편집 보호 없음). v0.5 보완: 투입 산불 검사는 RES-03과 같습니다.
 
-**주요 오류:** 공통 401·403·404·422·500 오류를 적용합니다.
+**주요 오류:** 409 DUPLICATE_RESOURCE_NAME, 422 INVALID_BASE / VALIDATION_ERROR
 
 <a id="res-05"></a>
 
@@ -3817,9 +3832,9 @@ name·org_type·coverage_area_ids·geometry 중 1개 이상. geometry만 null �
 }
 ```
 
-**처리 규칙:** 관할 변경은 해당 기지 자원의 관할·응원 계산에 영향을 줍니다. 과거 제안 facts는 저장 당시 값을 유지합니다. 변경 로그를 남깁니다.
+**처리 규칙:** 관할 변경은 해당 기지 자원의 관할·응원 계산에 영향을 줍니다. 과거 제안 facts는 저장 당시 값을 유지합니다. 변경 로그를 남깁니다(v0.5 보완: 이벤트 BASE_UPDATED).
 
-**주요 오류:** 공통 401·403·404·422·500 오류를 적용합니다.
+**주요 오류:** 409 DUPLICATE_BASE_NAME, 422 INVALID_COVERAGE
 
 <a id="base-04"></a>
 
@@ -4262,7 +4277,7 @@ expected_prediction_id: ID, situation_revision: string 모두 필수
 
 **처리 규칙:** 새 예측을 돌리지 않고 최신 성공 예측과 승인된 현재 상황으로 제안을 만듭니다. 미반영 정정이 있어야 하며 가장 최근 미반영 correction_id를 연결하는 안입니다. 여러 정정 누적 시 한 제안이 어디까지 반영했는지 판별하는 기준은 Q-06에서 확정합니다.
 
-**주요 오류:** 409 INCIDENT_ENDED / STALE_PREDICTION / STALE_SITUATION / REGENERATION_NOT_NEEDED, 422 NO_PREDICTION
+**주요 오류:** 409 INCIDENT_ENDED / STALE_PREDICTION / STALE_SITUATION / REGENERATION_NOT_NEEDED / OPERATION_RUNNING(이 산불 계산 중, v0.5 보완), 422 NO_PREDICTION
 
 <a id="ai-01"></a>
 
@@ -4343,7 +4358,7 @@ input_text: string(1~2000) 필수. proposal_id: ID 또는 null, item_code: strin
 - 자원 상한: 자원 테이블에 있는 칸(산림청 · 지자체 임차 · 소방 헬기, 진화차 · 소방차)은 그 칸 자원의 대기 + 이 산불 투입 대수를 넘게 늘릴 수 없습니다. 넘는 줄만 ignored로 빼고 나머지는 확인안으로 보입니다(COR-01에서 다시 확인).
 - LLM(GPU 서버)에 닿지 않으면 503 AI_UNAVAILABLE입니다. 서버 설정 `ASSISTANT=rules`(기본)는 LLM 없이 규칙으로만 답합니다.
 
-**주요 오류:** 409 INCIDENT_ENDED (정정 입력), 422 VALIDATION_ERROR / TARGET_NOT_FOUND / AMBIGUOUS_TARGET / INVALID_COUNT(0보다 작아짐), 503 AI_UNAVAILABLE
+**주요 오류:** 409 INCIDENT_ENDED (정정 입력), 422 VALIDATION_ERROR, 503 AI_UNAVAILABLE. v0.5 보완: 정정할 수 없는 말 · 대상 마을을 못 찾음 · 수를 못 읽음은 오류가 아니라 200으로 답합니다 — 바꿀 것이 하나도 없으면 `UNSUPPORTED`(reason · ignored), 일부만 읽혔으면 `CORRECTION_PREVIEW`의 ignored에 이유와 함께(TARGET_NOT_FOUND · AMBIGUOUS_TARGET · INVALID_COUNT는 쓰지 않음).
 
 <a id="ai-02"></a>
 
@@ -4584,7 +4599,7 @@ confirmation_token: string 필수. 클라이언트가 changes를 재작성해서
 | incident_id | ID | COMMANDER 필수 | 관할 산불 로그 |
 | action | string | 선택 | 행위 코드 |
 | user_id | ID | 선택 | 사용자별 |
-| from_at / to_at | DateTime | 선택 | 발생시각 범위 |
+| from_at / to_at | DateTime | 선택 | 발생시각 범위 — **v0.5 서버 미구현**(보내도 무시되고 전체가 옴) |
 | cursor | string | 선택 | 서버 발급 불투명 커서 |
 | limit | integer | 선택 | 기본 20, 최대 100 |
 
@@ -4802,9 +4817,9 @@ name·organization·role·admin_area_id 중 1개 이상, 타입은 발급과 동
 }
 ```
 
-**처리 규칙:** 관할의 마지막 COMMANDER는 회수하거나 COMMANDER 역할/해당 관할에서 빼지 못합니다. users 변경 후 다음 요청부터 새 권한을 적용합니다.
+**처리 규칙:** 관할의 마지막 COMMANDER는 회수하거나 COMMANDER 역할/해당 관할에서 빼지 못합니다. users 변경 후 다음 요청부터 새 권한을 적용합니다. v0.5 보완: 관리자가 자기 계정의 역할을 바꿀 수 없고, 회수한 계정은 바꿀 수 없습니다.
 
-**주요 오류:** 409 LAST_COMMANDER, 422 INVALID_JURISDICTION
+**주요 오류:** 409 LAST_COMMANDER / SELF_MODIFICATION / ACCOUNT_REVOKED, 422 INVALID_JURISDICTION
 
 <a id="usr-04"></a>
 
@@ -4832,9 +4847,9 @@ name·organization·role·admin_area_id 중 1개 이상, 타입은 발급과 동
 
 본문 없음.
 
-**처리 규칙:** users 행은 지우지 않고 deleted_at을 기록합니다. 관할의 마지막 COMMANDER는 회수 금지입니다. 기존 JWT라도 다음 요청의 users 조회에서 거절합니다.
+**처리 규칙:** users 행은 지우지 않고 deleted_at을 기록합니다. 관할의 마지막 COMMANDER는 회수 금지입니다. 기존 JWT라도 다음 요청의 users 조회에서 거절합니다. v0.5 보완: 관리자는 자기 계정을 회수할 수 없고, 이미 회수한 계정을 다시 회수해도 204(로그는 처음 한 번)입니다.
 
-**주요 오류:** 409 LAST_COMMANDER
+**주요 오류:** 409 LAST_COMMANDER / SELF_MODIFICATION
 
 <a id="usr-05"></a>
 
@@ -4874,9 +4889,9 @@ name·organization·role·admin_area_id 중 1개 이상, 타입은 발급과 동
 }
 ```
 
-**처리 규칙:** 서버가 새 비밀번호를 만들어 해시를 저장하고 이번 응답에서만 전달하는 안입니다. 기존 JWT 폐기와 최초 변경 강제는 현 스키마에 근거가 없어 Q-09에서 확정해야 합니다.
+**처리 규칙:** 서버가 새 비밀번호를 만들어 해시를 저장하고 이번 응답에서만 전달하는 안입니다. 기존 JWT 폐기와 최초 변경 강제는 현 스키마에 근거가 없어 Q-09에서 확정해야 합니다. v0.5 보완(지금 서버): 로그인 잠금은 그대로 두고(해제는 USR-06), 이미 받은 토큰은 만료(30분)까지 쓸 수 있으며, 다음 로그인 때 변경을 강제하지 않습니다.
 
-**주요 오류:** 공통 401·403·404·422·500 오류를 적용합니다.
+**주요 오류:** 409 ACCOUNT_REVOKED
 
 <a id="usr-06"></a>
 
@@ -5024,7 +5039,7 @@ R = Σ(포함 변수의 원가중치 × 등급) ÷ Σ(포함 변수의 원가중
 | ID | 확인할 내용 | 현재 근거·질문 | 영향 |
 | --- | --- | --- | --- |
 | Q-01 | 위험도 저장·계산·종료 정책 | **v0.5 일부 확정**: 위험도를 못 구해도 예측·제안은 저장하고 RISK-01만 data: null. 아래는 미결 — DB 4.2: predictions 컬럼 추가/별도 risk_assessments, 등급 래스터 저장소, 종료 후 최대 위험도 표시가 미결. 변수별 구간 경계·수분/지형복잡도·임상도 변환·격자 30/100m·기상 시점/공간·취약인구 범위·소방서 거리 기준·최종 표시 등급도 확인. 미산출의 부분 허용 결정과 현재 서버의 시험용 위험도(fake-0)는 구분 | RISK-01, PRED-01, E2·AI |
-| Q-02 | 현재 단계 판정 시 P5 가용 시점 | **v0.5 확정**: current_stage는 예측할 때 판정(보고·정정 때 판정 안 함, STAGE_INPUT_UNAVAILABLE 삭제). **남은 것**: 관측시각 역전 — 서버는 422 INVALID_OBSERVED_AT(확인 필요). 원래 질문 — DB는 산불/화선 보고 때 current_stage 판정, 시설피해 우려는 P5 안 주택+국가유산으로 규정. 최초 보고·새 화선 보고 직후 해당 P5가 아직 없거나 최신 화선과 예측 기준이 다를 때 무엇으로 판정할지 불명확. 예측 전 시설피해 결측·기상 수신 실패·NN 단계 저장·관측시각 역전도 함께 결정 | INC-02, PER-02·03, S1 |
+| Q-02 | 현재 단계 판정 시 P5 가용 시점 | **v0.5 확정**: current_stage는 예측할 때 판정(보고·정정 때 판정 안 함, STAGE_INPUT_UNAVAILABLE 삭제). 관측시각 역전도 **확정(11/11)**: 이전 · 5분 넘게 미래면 422 INVALID_OBSERVED_AT. 원래 질문 — DB는 산불/화선 보고 때 current_stage 판정, 시설피해 우려는 P5 안 주택+국가유산으로 규정. 최초 보고·새 화선 보고 직후 해당 P5가 아직 없거나 최신 화선과 예측 기준이 다를 때 무엇으로 판정할지 불명확. 예측 전 시설피해 결측·기상 수신 실패·NN 단계 저장·관측시각 역전도 함께 결정 | INC-02, PER-02·03, S1 |
 | Q-03 | 위기경보 유지 여부 | **v0.5 닫음**: 위기경보(alert_level)를 API·DB에서 삭제. 원래 질문 — DB는 alert_level 입력·정정 유지, LLM·규칙 문서는 쓰는 곳이 없어 제외/팀 논의. API는 DB 필드로 남기되 실제 입력 UI·필수 여부·정정 범위를 최종 확인 | INC·COR, S1·S6 |
 | Q-04 | detail·targets 최종 계약 | **v0.5 닫음**: 제안서 응답에 detail·targets를 넣지 않음(finding·withheld만, 지도 강조 MVP 제외). 원래 질문 — DB 옛 예시는 targets 객체, 최신 엔진은 문자열 배열. 이름 참조·kind 포함 참조도 혼재. 서버 어댑터의 PK 기반 정규화·저장 위치·권한 검증·외부 한글/영문 categories 매핑을 확정 | PROP·MAP·E5·E6 |
 | Q-05 | 작업·멱등키·동시성 | **v0.5 일부 확정**: INC-02 Idempotency-Key는 DB 저장(2.4). 예측 작업 기록은 서버 메모리(재시작 시 사라짐), 작업 실패 error.code 이름(PREDICTION_INVALID·PROPOSAL_FAILED·INTERNAL_ERROR)은 확인 필요. 원래 질문 — 202/작업 조회는 API 제안. 작업 큐·공유 저장소·보존기간·재시작 복구, idempotency 결과 재전달, 화선·상황·자원 변경·종료 중 커밋 정책을 확정. predictions에는 성공 행만 저장 | PRED·COR·PROP-05·보고 |
@@ -5039,6 +5054,24 @@ R = Σ(포함 변수의 원가중치 × 등급) ÷ Σ(포함 변수의 원가중
 <a id="changes"></a>
 
 ## 10. 바뀐 내용
+
+### v0.5 보완 — 서버와 맞춤 (2026-11-11)
+
+명세 ↔ `wfg-server` main(`06f12fd`) 비교 결과를 반영했습니다. 46개 API의 경로 · 권한 · 요청 · 응답 칸은 이미 같았고, 오류 코드와 처리 규칙 글만 고쳤습니다. **응답 모양은 바뀌지 않습니다.**
+
+| 곳 | 이번 반영 |
+| --- | --- |
+| 2.3 공통 오류 | 오류 코드 이름 표 추가(BAD_REQUEST · UNAUTHORIZED · TOKEN_EXPIRED · INVALID_TOKEN · FORBIDDEN_ROLE · ACCOUNT_UNAVAILABLE · NOT_FOUND · VALIDATION_ERROR · INVALID_CURSOR · INTERNAL_ERROR) |
+| RISK-01 · RiskFactor | 「합의 뒤 구현하는 조건부 API」 → 부를 때마다 계산(PARTIAL · UNAVAILABLE), 쓰지 않는 오류 2개 정리. 변수 등급 grade = number(소수) |
+| AI-01 | 쓰지 않는 422 오류 3개 정리 — 대상 · 수를 못 읽으면 200(UNSUPPORTED 또는 확인안의 ignored) |
+| PROP-05 | 409 OPERATION_RUNNING |
+| PRED-05 · Operation | 작업 실패 코드 「이름 확인 필요」 → 확정 |
+| INC-04 | 투입 자원 풀기 「서버 반영 예정」 → 반영(로그 포함) |
+| PER-02 · 03 · Q-02 | 관측 시각 규칙 확정 — 이전 · 5분 넘게 미래면 422, PER-03도 미래 거절 |
+| USR-03 · 04 · 05 | SELF_MODIFICATION · ACCOUNT_REVOKED, 다시 회수해도 204, 재발급 때 잠금 · 토큰 처리(지금 서버) |
+| RES-03 · 04 · BASE-03 | 투입 산불 검사 422 VALIDATION_ERROR, 이름 중복 · 기지 · 관할 오류, 로그 BASE_UPDATED |
+| MAP-03 · 04 | 보고자 기지 403 · UNKNOWN_ENTITY_TYPE, 검색 범위 확정 |
+| LOG-01 | from_at · to_at — 서버 미구현 표시(보내도 무시) |
 
 ### v0.5 보완 — 예측 모드 (2026-11-11)
 
@@ -5090,7 +5123,7 @@ P1·P2 API를 서버 구현(`wfg-server` main `907bd42`)과 대조해 고쳤습�
 | 위기경보 | AlertLevel·alert_level 삭제(INC-02 요청에 보내면 422). Q-03 닫음 |
 | 대응단계 판정 | 산불·화선 보고/정정 때가 아니라 예측할 때. STAGE_INPUT_UNAVAILABLE 삭제 |
 | 산불 | INC-01 ADMIN 허용(전체 지역), INC-03 running_operation_id, INC-02 Idempotency-Key 규칙 확정, INC-04 종료 시 투입 자원 자동 해제(서버 반영 예정) |
-| 화선 | PER-02·03 Polygon 허용. 관측 시각 역전은 422 INVALID_OBSERVED_AT(확인 필요) |
+| 화선 | PER-02·03 Polygon 허용. 관측 시각 역전 · 미래는 422 INVALID_OBSERVED_AT(11/11 확정) |
 | 예측·기상 | PRED-01 성공·실패 구조는 v0.4 그대로(기상은 요청 때, 실패는 503). 작업에 EVIDENCE 단계 안 나옴, 작업 실패 코드 이름(확인 필요), 위험도 미산출이어도 저장. Weather source FIXED·hours[].kind 추가. WTH-01 지금 날씨 추가 |
 | 지도·자원 | 대피소 tier 값(village·hub·null), Resource·RES-03·04 deployed_incident_id, RES-02 incident_linked |
 | 값 표기 | 영문 코드 유지. 한글 그대로는 Evidence.origin·hours[].kind 두 개 |
@@ -5124,6 +5157,7 @@ P1·P2 API를 서버 구현(`wfg-server` main `907bd42`)과 대조해 고쳤습�
 | 2026-11-10 | v0.5 검토본 | wfg-server main(907bd42)과 P1·P2 대조. 제안서 계약 재작성, EVD-01 삭제·WTH-01 추가, 위기경보 삭제. PR #66 병합 검토에서 Evidence/withheld null 허용, 재시도 보장 범위·DB 대조 출처를 보정 |
 | 2026-11-10 | v0.5 보완 | AI-01 · COR를 wfg-server PR #24와 맞춤(응답 칸 추가, 헬기 미상 칸, 자원 상한 기준, 이벤트 이름) |
 | 2026-11-11 | v0.5 보완 | ELMFIRE 기상(Weather source KMA_STATIONS · location, wfg-server PR #36) · 예측 모드(PRED-01 mode, PRED-05 result.mode · predictor, PR #40) |
+| 2026-11-11 | v0.5 보완 | 서버와 맞춤 — 공통 오류 코드 표, RISK-01 구현 반영, 오류 목록 정리, 11/11 확정 규칙(화선 관측 시각 · 계정 · 자원 · 지도), LOG-01 기간 미구현 표시 |
 
 요청·응답 타입과 미결 항목을 팀에서 검토한 후 main에 병합합니다. v0.5는 docs/api-spec-v0.5 작업 브랜치에서 검토하며 다른 설계 파일은 수정하지 않습니다. 이후 API 계약을 바꾸면 관련 DTO·프론트 타입·목업 응답·서버 OpenAPI도 같은 변경에 맞춰 관리합니다.
 
