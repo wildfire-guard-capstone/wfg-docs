@@ -178,6 +178,7 @@
 | FacilityType | SHELTER, VULNERABLE, HOSPITAL, FIRE_STATION, POLICE, HERITAGE | DB facilities.type, 적재 CSV의 소문자 type은 적재 시 변환 |
 | AdminLevel | SIDO, SIGUNGU, EMD | 행정구역 |
 | OperationStatus | QUEUED, RUNNING, SUCCEEDED, FAILED | API 작업 계층 제안, predictions DB ENUM이 아님 |
+| PredictionMode | LIVE, DEMO_ELMFIRE | PRED-01 예측 방식: 실서비스(ELMFIRE · 실시간 기상) / 시연 1(ELMFIRE · 의성 2025 기상). 안 보내면(null) 서버 기본 설정. 시연 2(DEMO_REPLAY)는 아직 없음. DB ENUM이 아님 (v0.5 보완) |
 | ProposalItemState | GENERATED, PARTIAL, FAILED, REUSED, NOT_TRIGGERED | 제안 항목 상태: 생성/일부 생성/실패(검사를 통과한 제안 없음)/재사용(직전 회차 그대로)/해당 없음(발동 안 함) (v0.5) |
 | ChangeType | NEW, CHANGED, SAME | PROP-02·03 항목의 직전 버전 대비 표시 (v0.4의 ADDED/CHANGED/UNCHANGED 대체, v0.5) |
 | DiffItemChange | CHANGED, NEW, REMOVED | PROP-04 바뀐 항목: 변경/신규/빠짐 (v0.5) |
@@ -773,7 +774,7 @@ predictions에는 성공 결과만 저장합니다. 진행·실패 상태는 Ope
 | kind | PREDICTION / PROPOSAL_REGENERATION | 필수 | 장시간 작업 종류 |
 | status | OperationStatus | 필수 | QUEUED / RUNNING / SUCCEEDED / FAILED |
 | stage | string 또는 null | 필수·null 허용 | SPREAD / RISK / RULES / PROPOSAL_GENERATION / COMMIT. v0.5 서버는 EVIDENCE를 내지 않음(근거 검색이 PROPOSAL_GENERATION 안에서 같이 돎) |
-| result | object 또는 null | 필수·null 허용 | 성공 때 prediction_id·proposal_id 반환. 정정 관련 작업은 correction_id도 가능 |
+| result | object 또는 null | 필수·null 허용 | 성공 때 prediction_id·proposal_id 반환. 정정 관련 작업은 correction_id도 가능. 예측 작업(PREDICTION)은 mode(요청한 PredictionMode, null = 서버 기본)·predictor(실제로 쓴 예측 synthetic·file·elmfire)도 반환 (v0.5 보완) |
 | error | object 또는 null | 필수·null 허용 | 실패 때 code·message. HTTP 오류와 같은 코드 체계. v0.5 서버 코드: 커밋 직전 재검사 `STALE_PERIMETER`·`INCIDENT_ENDED`, 계산 실패 `PREDICTION_INVALID`(예측 결과 검사 실패)·`PROPOSAL_FAILED`(규칙·제안 단계)·`INTERNAL_ERROR` — **이름 확인 필요** |
 
 작업 큐·보존기간·재시작 후 복구는 Q-05에서 확정해야 합니다. 서버 구현 없이 메모리 작업만으로 운영 계약이 충족됐다고 보지 않습니다.
@@ -2551,13 +2552,20 @@ geometry: Polygon 또는 MultiPolygon(MultiPolygon으로 저장), observed_at: D
 
 **Request Body**
 
-expected_perimeter_id: ID 필수
+expected_perimeter_id: ID 필수, mode: PredictionMode 또는 null 선택(v0.5 보완)
 
 ```json
 {
-  "expected_perimeter_id": "21"
+  "expected_perimeter_id": "21",
+  "mode": "LIVE"
 }
 ```
+
+| mode | 예측 | 기상 | Weather.source |
+| --- | --- | --- | --- |
+| 없음 · null | 서버 기본 설정(PREDICTOR). 지금 EC2는 가짜 타원(synthetic) | 서버 설정의 원천(WEATHER) | 설정에 따름 |
+| LIVE | ELMFIRE | 실시간 관측소(매분자료 + 단기예보) → 600 m 격자 | KMA_STATIONS |
+| DEMO_ELMFIRE | ELMFIRE(의성 덱) | 덱에 든 2025-03-22 관측 기상, 기온·습도는 ASOS | AWS_OBS |
 
 **Response**
 
@@ -2579,9 +2587,9 @@ expected_perimeter_id: ID 필수
 }
 ```
 
-**처리 규칙:** 최신 유효 화선만 대상으로 하며 과거 화선 지정 실행은 허용하지 않습니다. 서버가 기상 지점을 선택하고 base_at=observed_at으로 고정합니다. **v0.5: 기상은 요청 때 먼저 받습니다**(서버 설정의 원천에서 9시간). 못 받으면 작업을 만들지 않고 503 WEATHER_UNAVAILABLE이며, 받은 기상은 예측에 넘기고 predictions.weather로 저장해 규칙·제안도 같은 값을 씁니다. **ELMFIRE 예측(v0.5 보완)**도 요청 때 기상 입력(관측소 격자 — 실시간 또는 시연)을 만들고, 남은 관측소가 3곳 미만이거나 시연 기상에 없는 시각이면 같은 503입니다(다른 기상으로 대신하지 않음). 이때 predictions.weather = 그 격자의 발화점 칸 9시간. 예측→P1~P8→위험도→규칙→근거→제안 계산 후 최종 결과를 한 트랜잭션으로 저장합니다. 실패 시 직전 예측·제안이 유지됩니다. 계산 중 새 화선·정정 발생 시 오래된 결과를 최신으로 커밋하지 않도록 재검사합니다. **v0.5 결정(Q-01 일부)**: 위험도를 못 구해도 예측·제안은 저장합니다(RISK-01만 data: null). 근거 검색은 제안 작성(PROPOSAL_GENERATION) 안에서 함께 합니다. 작업 저장소는 Q-05에서 확정합니다(v0.5 서버는 메모리).
+**처리 규칙:** **v0.5 보완 — mode**: 예측마다 고르며 서버 기본값을 바꾸지 않습니다. 고른 mode와 실제로 쓴 예측은 PRED-05 result.mode·predictor와 이벤트 로그에 남고 DB 칸은 없습니다(PRED-02에는 없음). LIVE는 관측소가 3곳 미만이면(기상청 응답 없음 포함), DEMO_ELMFIRE는 화선 시각이 덱 기상(2025-03-22)에 없으면 503 WEATHER_UNAVAILABLE입니다. 최신 유효 화선만 대상으로 하며 과거 화선 지정 실행은 허용하지 않습니다. 서버가 기상 지점을 선택하고 base_at=observed_at으로 고정합니다. **v0.5: 기상은 요청 때 먼저 받습니다**(서버 설정의 원천에서 9시간). 못 받으면 작업을 만들지 않고 503 WEATHER_UNAVAILABLE이며, 받은 기상은 예측에 넘기고 predictions.weather로 저장해 규칙·제안도 같은 값을 씁니다. **ELMFIRE 예측(v0.5 보완)**도 요청 때 기상 입력(관측소 격자 — 실시간 또는 시연)을 만들고, 남은 관측소가 3곳 미만이거나 시연 기상에 없는 시각이면 같은 503입니다(다른 기상으로 대신하지 않음). 이때 predictions.weather = 그 격자의 발화점 칸 9시간. 예측→P1~P8→위험도→규칙→근거→제안 계산 후 최종 결과를 한 트랜잭션으로 저장합니다. 실패 시 직전 예측·제안이 유지됩니다. 계산 중 새 화선·정정 발생 시 오래된 결과를 최신으로 커밋하지 않도록 재검사합니다. **v0.5 결정(Q-01 일부)**: 위험도를 못 구해도 예측·제안은 저장합니다(RISK-01만 data: null). 근거 검색은 제안 작성(PROPOSAL_GENERATION) 안에서 함께 합니다. 작업 저장소는 Q-05에서 확정합니다(v0.5 서버는 메모리).
 
-**주요 오류:** 409 INCIDENT_ENDED / PREDICTION_RUNNING / STALE_PERIMETER, 503 WEATHER_UNAVAILABLE
+**주요 오류:** 409 INCIDENT_ENDED / PREDICTION_RUNNING / STALE_PERIMETER, 422 VALIDATION_ERROR(모르는 mode), 503 WEATHER_UNAVAILABLE
 
 <a id="pred-02"></a>
 
@@ -2922,7 +2930,30 @@ expected_perimeter_id: ID 필수
 }
 ```
 
-**처리 규칙:** 2초 간격 조회를 제안합니다. 완료는 SUCCEEDED/FAILED로 끝나며 HTTP 200 응답 안에서 작업 실패를 구분합니다. operation은 요청 사용자·산불에 결합하고 보존기간은 Q-05에서 확정합니다. v0.5 서버의 FAILED error.code는 Operation DTO 참고(이름 확인 필요). 작업 기록이 서버 메모리라 서버를 다시 켜면 진행 중이던 작업도 404입니다(Q-05).
+성공(SUCCEEDED) 예 — 예측 작업(v0.5 보완)
+
+```json
+{
+  "data": {
+    "id": "op-example",
+    "kind": "PREDICTION",
+    "status": "SUCCEEDED",
+    "stage": "COMMIT",
+    "result": {
+      "prediction_id": "41",
+      "proposal_id": "52",
+      "mode": "LIVE",
+      "predictor": "elmfire"
+    },
+    "error": null
+  },
+  "meta": {
+    "request_id": "req-example"
+  }
+}
+```
+
+**처리 규칙:** 2초 간격 조회를 제안합니다. 완료는 SUCCEEDED/FAILED로 끝나며 HTTP 200 응답 안에서 작업 실패를 구분합니다. operation은 요청 사용자·산불에 결합하고 보존기간은 Q-05에서 확정합니다. v0.5 서버의 FAILED error.code는 Operation DTO 참고(이름 확인 필요). ELMFIRE(LIVE·DEMO_ELMFIRE)는 화선이 덱 범위 밖 등 입력 문제면 PREDICTION_INVALID, 시간 초과(5분)·실행 실패·실행 컨테이너 연결 실패면 INTERNAL_ERROR입니다(v0.5 보완). 작업 기록이 서버 메모리라 서버를 다시 켜면 진행 중이던 작업도 404입니다(Q-05).
 
 **주요 오류:** 공통 401·403·404·422·500 오류를 적용합니다.
 
@@ -4962,7 +4993,7 @@ R = Σ(포함 변수의 원가중치 × 등급) ÷ Σ(포함 변수의 원가중
 | 보고 지도 | MAP-01 → MAP-02·MAP-04. 발화점·실측 폴리곤 작성, 서버 결과로 버전 갱신 |
 | 보고·정정 | INC-02 또는 PER-02·03 → INC-03·PER-01 재조회. 새 화선이면 재예측 안내 |
 | 지도 탐색 | bbox 변경에 맞춰 MAP-02. 이전 응답이 뒤늦게 와도 현재 화면 범위를 덮어쓰지 않게 취소/요청 구분 |
-| 예측 실행 | PRED-01의 202(기상을 못 받으면 바로 503) → PRED-05 조회 → 성공 후 INC-03 재조회 및 PRED-02·03·04, RISK-01, PROP-02를 동일 결과 ID로 연결. 산불현황 기상 칸은 WTH-01 |
+| 예측 실행 | PRED-01의 202(기상을 못 받으면 바로 503, mode는 선택 — 실서비스·시연) → PRED-05 조회(result.mode로 어떤 방식이었는지 표시) → 성공 후 INC-03 재조회 및 PRED-02·03·04, RISK-01, PROP-02를 동일 결과 ID로 연결. 산불현황 기상 칸은 WTH-01 |
 | 예측 실패 | 기존 도형·제안 유지, 작업 오류 안내. 버튼만 재활성화하고 중복 요청을 피함 |
 | 제안 필터 | PROP-02/03의 items[].axis·categories로 진화/대피 탭·구분 필터. 지도 강조(targets)는 v0.5 응답에 없음(MVP 제외) |
 | 근거·이력 | 문단의 cite를 누르면 같은 항목의 evidence[](원문 포함)에서 찾아 표시, quote로 칠함. 이력은 PROP-01 → PROP-03/04. 해당 버전의 근거·수치 표시 |
@@ -5008,6 +5039,18 @@ R = Σ(포함 변수의 원가중치 × 등급) ÷ Σ(포함 변수의 원가중
 <a id="changes"></a>
 
 ## 10. 바뀐 내용
+
+### v0.5 보완 — 예측 모드 (2026-11-11)
+
+`wfg-server` PR #40(예측 모드) · #39(ELMFIRE 실행 컨테이너)와 맞췄습니다. 요청에 칸 하나가 늘고 작업 결과에 칸 둘이 늘었습니다. 안 보내면 지금과 같습니다.
+
+| 변경 | 이번 반영 |
+| --- | --- |
+| PRED-01 요청 | `mode` 선택 칸 — LIVE(실서비스) · DEMO_ELMFIRE(시연 1) · 없음(서버 기본). 모르는 값은 422 |
+| PRED-01 503 | LIVE 관측소 3곳 미만 · DEMO_ELMFIRE 덱 기상에 없는 시각 |
+| PRED-05 result | `mode` · `predictor` 추가(성공한 예측 작업) |
+| 작업 실패 | ELMFIRE 입력 문제 PREDICTION_INVALID, 시간 초과 · 실행 실패 INTERNAL_ERROR |
+| 상태값 | PredictionMode 추가. 시연 2(DEMO_REPLAY)는 만들면 값을 더함 |
 
 ### v0.5 보완 — ELMFIRE 기상 (2026-11-11)
 
@@ -5080,6 +5123,7 @@ P1·P2 API를 서버 구현(`wfg-server` main `907bd42`)과 대조해 고쳤습�
 | 2026-11-06 | v0.4 검토본 | main 고정 커밋의 설계 5개 재검토, 46개 API·요청/응답·규칙/지도 계약 재작성. docs/api-spec-v0.4 브랜치에 추가 |
 | 2026-11-10 | v0.5 검토본 | wfg-server main(907bd42)과 P1·P2 대조. 제안서 계약 재작성, EVD-01 삭제·WTH-01 추가, 위기경보 삭제. PR #66 병합 검토에서 Evidence/withheld null 허용, 재시도 보장 범위·DB 대조 출처를 보정 |
 | 2026-11-10 | v0.5 보완 | AI-01 · COR를 wfg-server PR #24와 맞춤(응답 칸 추가, 헬기 미상 칸, 자원 상한 기준, 이벤트 이름) |
+| 2026-11-11 | v0.5 보완 | ELMFIRE 기상(Weather source KMA_STATIONS · location, wfg-server PR #36) · 예측 모드(PRED-01 mode, PRED-05 result.mode · predictor, PR #40) |
 
 요청·응답 타입과 미결 항목을 팀에서 검토한 후 main에 병합합니다. v0.5는 docs/api-spec-v0.5 작업 브랜치에서 검토하며 다른 설계 파일은 수정하지 않습니다. 이후 API 계약을 바꾸면 관련 DTO·프론트 타입·목업 응답·서버 OpenAPI도 같은 변경에 맞춰 관리합니다.
 
