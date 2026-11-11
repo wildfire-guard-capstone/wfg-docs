@@ -2730,7 +2730,7 @@ expected_perimeter_id: ID 필수, mode: PredictionMode 또는 null 선택(v0.5 �
     "features": [
       {
         "type": "Feature",
-        "id": "61",
+        "id": "41-5",
         "geometry": {
           "type": "MultiPolygon",
           "coordinates": [
@@ -2771,7 +2771,7 @@ expected_perimeter_id: ID 필수, mode: PredictionMode 또는 null 선택(v0.5 �
 }
 ```
 
-**처리 규칙:** GeoJSON properties는 prediction_id: ID, hour: integer, at: DateTime, area_ha: number입니다. 선택 hour는 1개, 미지정은 8개 반환합니다. 예시는 hour=5 요청입니다. 도형은 MultiPolygon, P(n)이 P(n-1)을 포함해야 합니다. P5=위험구역, P8=잠재 위험구역이며 지도에서 시간 순서로 재생합니다.
+**처리 규칙:** Feature `id`는 `{prediction_id}-{hour}` 문자열입니다(예: 예측 41의 P5 → `"41-5"`, v0.5 보완 — 서버와 같음). GeoJSON properties는 prediction_id: ID, hour: integer, at: DateTime, area_ha: number입니다. 선택 hour는 1개, 미지정은 8개 반환합니다. 예시는 hour=5 요청입니다. 도형은 MultiPolygon, P(n)이 P(n-1)을 포함해야 합니다. P5=위험구역, P8=잠재 위험구역이며 지도에서 시간 순서로 재생합니다.
 
 **주요 오류:** 공통 401·403·404·422·500 오류를 적용합니다.
 
@@ -5072,6 +5072,7 @@ R = Σ(포함 변수의 원가중치 × 등급) ÷ Σ(포함 변수의 원가중
 | RES-03 · 04 · BASE-03 | 투입 산불 검사 422 VALIDATION_ERROR, 이름 중복 · 기지 · 관할 오류, 로그 BASE_UPDATED |
 | MAP-03 · 04 | 보고자 기지 403 · UNKNOWN_ENTITY_TYPE, 검색 범위 확정 |
 | LOG-01 | from_at · to_at — 서버 미구현 표시(보내도 무시) |
+| PRED-03 | Feature `id` = `{prediction_id}-{hour}`(예 `"41-5"`) — 예시가 숫자 ID(`"61"`)였던 것을 서버 형식에 맞춤 |
 
 ### v0.5 보완 — 예측 모드 (2026-11-11)
 
@@ -5158,6 +5159,7 @@ P1·P2 API를 서버 구현(`wfg-server` main `907bd42`)과 대조해 고쳤습�
 | 2026-11-10 | v0.5 보완 | AI-01 · COR를 wfg-server PR #24와 맞춤(응답 칸 추가, 헬기 미상 칸, 자원 상한 기준, 이벤트 이름) |
 | 2026-11-11 | v0.5 보완 | ELMFIRE 기상(Weather source KMA_STATIONS · location, wfg-server PR #36) · 예측 모드(PRED-01 mode, PRED-05 result.mode · predictor, PR #40) |
 | 2026-11-11 | v0.5 보완 | 서버와 맞춤 — 공통 오류 코드 표, RISK-01 구현 반영, 오류 목록 정리, 11/11 확정 규칙(화선 관측 시각 · 계정 · 자원 · 지도), LOG-01 기간 미구현 표시 |
+| 2026-11-11 | v0.5 보완 | PRED-03 Feature id = `{prediction_id}-{hour}`(서버 형식) |
 
 요청·응답 타입과 미결 항목을 팀에서 검토한 후 main에 병합합니다. v0.5는 docs/api-spec-v0.5 작업 브랜치에서 검토하며 다른 설계 파일은 수정하지 않습니다. 이후 API 계약을 바꾸면 관련 DTO·프론트 타입·목업 응답·서버 OpenAPI도 같은 변경에 맞춰 관리합니다.
 
