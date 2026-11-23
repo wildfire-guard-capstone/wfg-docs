@@ -489,7 +489,7 @@ DB의 영문 ENUM과 규칙 엔진·LLM의 한글 표시는 구분합니다. 제
 | started_at | DateTime 또는 null | 필수·null 허용 | 발생시각 |
 | reported_at | DateTime | 필수 | 접수시각 |
 | report_text | string 또는 null | 필수·null 허용 | 신고내용 |
-| reporter_org | string 또는 null | 필수·null 허용 | 최대 100자, 신고 기관명. 기관별 접수 목록 아님 |
+| reporter_org | string 또는 null | 필수·null 허용 | 최대 100자, 신고 기관명. 기관별 접수 목록 아님 — 그것은 아래 `intake_records`(11/23) |
 | reporter_name / reporter_phone | string 또는 null | 필수·null 허용 | DB 저장은 성명 50자·연락처 20자 필수, 미상 허용. 역할별 응답 마스킹 정책은 Q-08 |
 | status | IncidentStatus | 필수 | 진행/종료 |
 | current_stage | ResponseStage | 필수 | **예측할 때 판정**한 값(PRED-01 성공 시 그 제안서의 judged_stage로 갱신). 화선 보고·정정 때는 판정하지 않으며 첫 예측 전에는 INITIAL. 사용자 입력 금지 (v0.5) |
@@ -502,6 +502,7 @@ DB의 영문 ENUM과 규칙 엔진·LLM의 한글 표시는 구분합니다. 제
 | proposal_stale | boolean | 필수 | 정정은 저장됐지만 현재 제안서가 이를 반영하지 못함 |
 | situation_revision | string | 필수 | 동시 수정 방지용 불투명 API 토큰 제안. DB 컬럼 추가 확정 아님. v0.5 서버는 `rev-{최신 정정 id}` 임시 값 — 상황 정정(COR-01) 결정 때 확정(확인 필요) |
 | running_operation_id | string 또는 null | 필수·null 허용 | 진행 중인 예측 작업 id(PRED-05로 조회). 없으면 null. 화면을 다시 열어도 진행 표시를 이어 감 (v0.5) |
+| intake_records | object[] | 필수 | **기관별 접수 기록(11/23)**. 각 줄 `id`(ID) · `org_name`(string, 최대 100자, 접수 기관) · `received_at`(DateTime, 접수 시각) · `channel`(string 최대 30자 또는 null, 접수 경로). 접수 시각 순(같으면 입력 순), 없으면 빈 배열. INC-02 때만 받고 고치는 API는 없음 |
 
 조회 참조들은 일관된 스냅샷으로 읽습니다. REPORTER에는 situation·예측·제안 참조 등 분석용 필드를 제외하고 보고 정보와 화선만 제공하는 안이며, 권한 범위는 Q-08에서 확정합니다.
 
@@ -561,7 +562,15 @@ DB의 영문 ENUM과 규칙 엔진·LLM의 한글 표시는 구분합니다. 제
   "needs_reprediction": false,
   "proposal_stale": false,
   "situation_revision": "rev-example-1",
-  "running_operation_id": null
+  "running_operation_id": null,
+  "intake_records": [
+    {
+      "id": "1",
+      "org_name": "의성소방서",
+      "received_at": "2025-03-22T11:25:00+09:00",
+      "channel": "119 신고"
+    }
+  ]
 }
 ```
 
@@ -2002,7 +2011,7 @@ login_id: string(1~50), password: 비어 있지 않은 string, role: UserRole; �
 
 **Request Body**
 
-ignition_point: Point, address: string(1~200), reported_at: DateTime, reporter_name: string(1~50), reporter_phone: string(1~20)은 필수(v0.5: alert_level 삭제 — 보내면 422 VALIDATION_ERROR). started_at·report_text·reporter_org는 생략/null 허용. initial_perimeter: {geometry: Polygon 또는 MultiPolygon(MultiPolygon으로 저장), observed_at: DateTime} 선택
+ignition_point: Point, address: string(1~200), reported_at: DateTime, reporter_name: string(1~50), reporter_phone: string(1~20)은 필수(v0.5: alert_level 삭제 — 보내면 422 VALIDATION_ERROR). started_at·report_text·reporter_org는 생략/null 허용. initial_perimeter: {geometry: Polygon 또는 MultiPolygon(MultiPolygon으로 저장), observed_at: DateTime} 선택. **intake_records(11/23)**: [{org_name: string(1~100), received_at: DateTime, channel: string(최대 30) 또는 null}] 선택 — 기관별 접수 기록, 최대 20줄, 생략하면 빈 배열
 
 ```json
 {
@@ -2019,7 +2028,14 @@ ignition_point: Point, address: string(1~200), reported_at: DateTime, reporter_n
   "report_text": null,
   "reporter_org": null,
   "reporter_name": "미상",
-  "reporter_phone": "미상"
+  "reporter_phone": "미상",
+  "intake_records": [
+    {
+      "org_name": "의성소방서",
+      "received_at": "2025-03-22T11:25:00+09:00",
+      "channel": "119 신고"
+    }
+  ]
 }
 ```
 
@@ -2054,7 +2070,15 @@ ignition_point: Point, address: string(1~200), reported_at: DateTime, reporter_n
     "ended_at": null,
     "ended_by": null,
     "current_perimeter_id": "20",
-    "current_perimeter_version": 0
+    "current_perimeter_version": 0,
+    "intake_records": [
+      {
+        "id": "1",
+        "org_name": "의성소방서",
+        "received_at": "2025-03-22T11:25:00+09:00",
+        "channel": "119 신고"
+      }
+    ]
   },
   "meta": {
     "request_id": "req-example"
@@ -2062,9 +2086,9 @@ ignition_point: Point, address: string(1~200), reported_at: DateTime, reporter_n
 }
 ```
 
-**처리 규칙:** 발화점으로 읍면동·관할을 서버가 계산합니다. 산불과 화선 v0을 같은 트랜잭션에서 저장합니다. initial_perimeter가 있으면 v1도 함께 저장합니다. status·current_stage·reported_by·기관별 접수 배열은 입력받지 않습니다. **v0.5: 보고 때 대응단계를 판정하지 않습니다** — current_stage는 INITIAL로 시작하고 예측(PRED-01) 때 판정합니다. 같은 키 재전송 처리는 2.4절.
+**처리 규칙:** 발화점으로 읍면동·관할을 서버가 계산합니다. 산불과 화선 v0을 같은 트랜잭션에서 저장합니다. initial_perimeter가 있으면 v1도 함께 저장합니다. status·current_stage·reported_by는 입력받지 않습니다. **기관별 접수 기록(intake_records, 11/23)은 받아서 산불과 같은 트랜잭션에 저장합니다**(생략하면 빈 배열). 저장 뒤 고치는 API는 없습니다. **v0.5: 보고 때 대응단계를 판정하지 않습니다** — current_stage는 INITIAL로 시작하고 예측(PRED-01) 때 판정합니다. 같은 키 재전송 처리는 2.4절.
 
-**주요 오류:** 409 IDEMPOTENCY_KEY_REUSED, 422 INVALID_GEOMETRY / OUTSIDE_JURISDICTION / VALIDATION_ERROR(alert_level 등 모르는 칸)
+**주요 오류:** 409 IDEMPOTENCY_KEY_REUSED, 422 INVALID_GEOMETRY / OUTSIDE_JURISDICTION / VALIDATION_ERROR(alert_level 등 모르는 칸, 접수 기록 21줄 이상 · 기관명 빈 값 · 시간대 없는 접수 시각)
 
 <a id="inc-03"></a>
 
@@ -2147,7 +2171,15 @@ ignition_point: Point, address: string(1~200), reported_at: DateTime, reporter_n
     "needs_reprediction": false,
     "proposal_stale": false,
     "situation_revision": "rev-example-1",
-    "running_operation_id": null
+    "running_operation_id": null,
+    "intake_records": [
+      {
+        "id": "1",
+        "org_name": "의성소방서",
+        "received_at": "2025-03-22T11:25:00+09:00",
+        "channel": "119 신고"
+      }
+    ]
   },
   "meta": {
     "request_id": "req-example"
@@ -2246,7 +2278,15 @@ expected_perimeter_id: ID 필수(현재 화선과 대조하는 API 제안)
     "needs_reprediction": false,
     "proposal_stale": false,
     "situation_revision": "rev-example-1",
-    "running_operation_id": null
+    "running_operation_id": null,
+    "intake_records": [
+      {
+        "id": "1",
+        "org_name": "의성소방서",
+        "received_at": "2025-03-22T11:25:00+09:00",
+        "channel": "119 신고"
+      }
+    ]
   },
   "meta": {
     "request_id": "req-example"
@@ -5082,6 +5122,18 @@ R = √(H × X)                          H · X · R 모두 1~5. X가 없으면 
 
 ## 10. 바뀐 내용
 
+### v0.5 보완 — 기관별 접수 기록 (2026-11-23)
+
+시연 QA(상황 보고)에서 화면의 기관별 접수 기록이 저장되지 않는 문제가 나와, DB-설계 1.3의 3번(10/23 제외)을 바꿔 서버에 저장합니다. wfg-server `feat/intake-records`(테이블 `intake_records`, 마이그레이션 `c8d2e4f6a1b3`)와 맞춥니다. **요청에 선택 칸 하나, 응답에 필수 칸 하나가 늘어납니다.**
+
+| 곳 | 이번 반영 |
+| --- | --- |
+| Incident | `intake_records` — 각 줄 id · org_name · received_at · channel, 접수 시각 순, 없으면 빈 배열. `reporter_org`(신고 기관 1개)와 다름 |
+| INC-02 | 요청 `intake_records` 선택(최대 20줄)을 산불과 같은 트랜잭션에 저장. 「기관별 접수 배열은 입력받지 않습니다」 삭제. 응답 예시에 저장된 줄 |
+| INC-03 · INC-04 | 응답(Incident) 예시에 `intake_records` |
+
+요청 본문은 모르는 칸을 422로 거절하므로, 이 칸을 보내는 클라이언트는 서버 배포(`alembic upgrade head` 포함) 뒤에 올립니다.
+
 ### v0.5 보완 — 위험도 새 정의 (2026-11-12)
 
 wfg-server PR #46 · wfg-client PR #4(main 병합, 배포)와 맞췄습니다. **RISK-01 응답 모양이 바뀝니다.**
@@ -5199,6 +5251,7 @@ P1·P2 API를 서버 구현(`wfg-server` main `907bd42`)과 대조해 고쳤습�
 | 2026-11-11 | v0.5 보완 | 서버와 맞춤 — 공통 오류 코드 표, RISK-01 구현 반영, 오류 목록 정리, 11/11 확정 규칙(화선 관측 시각 · 계정 · 자원 · 지도), LOG-01 기간 미구현 표시 |
 | 2026-11-11 | v0.5 보완 | PRED-03 Feature id = `{prediction_id}-{hour}`(서버 형식) |
 | 2026-11-12 | v0.5 보완 | 위험도 새 정의 — R = √(H × X), 변수 25개, Risk hazard · exposure · combine(wfg-server PR #46 · wfg-client PR #4) |
+| 2026-11-23 | v0.5 보완 | 기관별 접수 기록 — Incident `intake_records`, INC-02 요청에서 받아 저장(시연 QA) |
 
 요청·응답 타입과 미결 항목을 팀에서 검토한 후 main에 병합합니다. v0.5는 docs/api-spec-v0.5 작업 브랜치에서 검토하며 다른 설계 파일은 수정하지 않습니다. 이후 API 계약을 바꾸면 관련 DTO·프론트 타입·목업 응답·서버 OpenAPI도 같은 변경에 맞춰 관리합니다.
 
