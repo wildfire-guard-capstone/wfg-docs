@@ -279,7 +279,7 @@ DB의 영문 ENUM과 규칙 엔진·LLM의 한글 표시는 구분합니다. 제
 | --- | --- | --- | --- |
 | access_token | string | 필수 | JWT 예시 문자열은 실제 토큰이 아님 |
 | token_type | string | 필수 | bearer |
-| expires_in | integer | 필수 | 초. 1800은 API 초안 제안값 |
+| expires_in | integer | 필수 | 초. 서버 기본 86400(24시간, 11/23 시연 QA로 30분에서 늘림). 환경 변수 `JWT_EXPIRES_S` |
 | user | User | 필수 | 현재 역할·관할 |
 
 **DTO Example**
@@ -288,7 +288,7 @@ DB의 영문 ENUM과 규칙 엔진·LLM의 한글 표시는 구분합니다. 제
 {
   "access_token": "EXAMPLE_ACCESS_TOKEN",
   "token_type": "bearer",
-  "expires_in": 1800,
+  "expires_in": 86400,
   "user": {
     "id": "1",
     "login_id": "cmd01",
@@ -1834,7 +1834,7 @@ login_id: string(1~50), password: 비어 있지 않은 string, role: UserRole; �
   "data": {
     "access_token": "EXAMPLE_ACCESS_TOKEN",
     "token_type": "bearer",
-    "expires_in": 1800,
+    "expires_in": 86400,
     "user": {
       "id": "1",
       "login_id": "cmd01",
