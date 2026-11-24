@@ -905,6 +905,73 @@ predictions에는 성공 결과만 저장합니다. 진행·실패 상태는 Ope
 }
 ```
 
+<a id="dto-adminvillage"></a>
+
+### AdminVillage (11/25 추가)
+
+
+| 필드 | 타입 | 필수·null | 설명 |
+| --- | --- | --- | --- |
+| id / village_id | ID / ID | 필수 | 행정리 PK / 속한 법정리(villages.id) |
+| name / seq | string / integer | 필수 | 행정리 이름(최대 50자) / 조례 별표 순서 |
+| hall_point | Point 또는 null | 필수·null 허용 | 행정리 좌표. 마을회관 등의 자리이며 지도 아이콘을 찍는 점 |
+| hall_name / hall_source | string 또는 null | 필수·null 허용 | 좌표를 얻은 회관 이름 / 좌표 출처. 회관이 확인되지 않은 행정리는 `○○리마을회관`으로 채운 이름 |
+| geometry | MultiPolygon | 선택 | 행정리 구역. 집 위치로 추정한 범위이며 공식 경계가 아님. 구역이 없으면 칸을 주지 않음 |
+| houses_est | integer 또는 null | 필수·null 허용 | 구역으로 묶은 주택 동수(추정) |
+| attrs | object | 필수 | 구역을 만든 방법·면적·확인 메모. area_ha·share_of_beop·parts·hall_to_center_m·hall_weight·method, 있을 때만 hall_check·shared_with·hall_outside_beop |
+
+의성군 행정리만 있습니다(399곳, 법정리 182곳 전부). 인구와 대피 상태는 행정리 값이 없으므로 village_id의 법정리 값을 씁니다.
+
+**DTO Example**
+
+```json
+{
+  "id": "365",
+  "village_id": "1024",
+  "name": "시연1리",
+  "seq": 1,
+  "hall_name": "시연1리마을회관",
+  "hall_point": {
+    "type": "Point",
+    "coordinates": [
+      128.6,
+      36.37
+    ]
+  },
+  "hall_source": "시연 자료",
+  "geometry": {
+    "type": "MultiPolygon",
+    "coordinates": [
+      [
+        [
+          [
+            128.6,
+            36.37
+          ],
+          [
+            128.602,
+            36.37
+          ],
+          [
+            128.602,
+            36.372
+          ],
+          [
+            128.6,
+            36.37
+          ]
+        ]
+      ]
+    ]
+  },
+  "houses_est": 24,
+  "attrs": {
+    "area_ha": 5.4,
+    "parts": 1
+  }
+}
+```
+
 <a id="dto-facility"></a>
 
 ### Facility
@@ -1686,7 +1753,7 @@ current_stage·official_stage·기상·진화예상시간·부상·고립·자�
 | 필드 | 타입 | 필수·null | 설명 |
 | --- | --- | --- | --- |
 | id / name | string | 필수 | 아래 고정 레이어 ID / 표시명 |
-| entity_type | string | 필수 | admin_area / village / facility / map_feature |
+| entity_type | string | 필수 | admin_area / village / admin_village(11/25) / facility / map_feature |
 | available | boolean | 필수 | 실제 적재·조회 가능 여부 |
 | source / reference_date | string 또는 null | 필수·null 허용 | 서비스 코드의 출처 메타데이터. DB 컬럼 추가 아님 |
 | attribution | string 또는 null | 필수·null 허용 | 지도 출처 표시문 |
@@ -3266,7 +3333,7 @@ expected_perimeter_id: ID 필수, mode: PredictionMode 또는 null 선택(v0.5 �
 }
 ```
 
-**처리 규칙:** layer_id와 bbox를 허용 범위·관할로 제한합니다. ID는 문자열입니다. properties는 레이어에 따라 AdminArea/Village/Facility/MapFeature에서 geometry를 제외한 속성이며 label_point는 지도 라벨용으로 필요하면 포함합니다. has_more=true이면 다음 페이지를 모아 레이어를 구성합니다. 전체 데이터가 1000개라고 가정하지 않습니다.
+**처리 규칙:** layer_id와 bbox를 허용 범위·관할로 제한합니다. ID는 문자열입니다. properties는 레이어에 따라 AdminArea/Village/AdminVillage/Facility/MapFeature에서 geometry를 제외한 속성이며 label_point(법정리)·hall_point(행정리)는 지도 표시용으로 포함합니다. admin_villages의 bbox는 좌표가 아니라 구역(geometry)과 겹치는지로 봅니다(11/25). has_more=true이면 다음 페이지를 모아 레이어를 구성합니다. 전체 데이터가 1000개라고 가정하지 않습니다.
 
 **주요 오류:** 422 INVALID_BBOX / UNKNOWN_LAYER, 503 LAYER_UNAVAILABLE
 
@@ -3294,7 +3361,7 @@ expected_perimeter_id: ID 필수, mode: PredictionMode 또는 null 선택(v0.5 �
 
 **Response**
 
-`data`: {entity_type: string, entity: Village 또는 Facility 또는 MapFeature 또는 ResourceBase 또는 AdminArea}
+`data`: {entity_type: string, entity: Village 또는 AdminVillage 또는 Facility 또는 MapFeature 또는 ResourceBase 또는 AdminArea}
 
 ```json
 {
@@ -3350,9 +3417,9 @@ expected_perimeter_id: ID 필수, mode: PredictionMode 또는 null 선택(v0.5 �
 }
 ```
 
-**처리 규칙:** entity_type은 village / facility / map_feature / resource_base / admin_area입니다. 제안 targets와 연결합니다. REPORTER는 보고 지도용 허용 종류·범위만 조회하며 기지·분석 범위는 Q-08에서 합의합니다(v0.5 보완: REPORTER가 resource_base를 부르면 403 FORBIDDEN_ROLE — BASE-01과 같은 범위). 행정구역은 도형 없이 줍니다(경계는 MAP-02). 동적 노선 구간은 원본 map_feature ID 여러 개로 강조합니다.
+**처리 규칙:** entity_type은 village / admin_village(11/25) / facility / map_feature / resource_base / admin_area입니다. 제안 targets와 연결합니다. REPORTER는 보고 지도용 허용 종류·범위만 조회하며 기지·분석 범위는 Q-08에서 합의합니다(v0.5 보완: REPORTER가 resource_base를 부르면 403 FORBIDDEN_ROLE — BASE-01과 같은 범위). 행정구역은 도형 없이 줍니다(경계는 MAP-02). 동적 노선 구간은 원본 map_feature ID 여러 개로 강조합니다.
 
-**주요 오류:** 403 FORBIDDEN_ROLE, 422 UNKNOWN_ENTITY_TYPE(위 다섯 종류 밖)
+**주요 오류:** 403 FORBIDDEN_ROLE, 422 UNKNOWN_ENTITY_TYPE(위 여섯 종류 밖)
 
 <a id="map-04"></a>
 
@@ -5005,7 +5072,8 @@ name·organization·role·admin_area_id 중 1개 이상, 타입은 발급과 동
 | layer_id | 원본 | 화면 표시 |
 | --- | --- | --- |
 | admin_areas | admin_areas.geom | 행정경계, 속성 level로 시도·시군구·읍면 구분 |
-| villages | villages.geom | 법정리 경계·추정 인구. 라벨은 label_point |
+| villages | villages.geom | 법정리 경계·추정 인구. 라벨은 label_point. 화면은 노란 2px 경계선과 이름 글자(11/25) |
+| admin_villages | admin_villages.hall_point·geom | 행정리(의성군 399곳). 화면은 hall_point에 아이콘과 name, 구역(geom)은 그리지 않음(11/25) |
 | facilities | facilities.geom | 시설 종류별 아이콘·팝업, type으로 필터 |
 | road | map_features.kind=road | 큰 도로, ref·highway 유지 |
 | track | map_features.kind=track | 임도 대용, OSM 농로가 섞인 자료임을 구분 |
@@ -5256,6 +5324,7 @@ P1·P2 API를 서버 구현(`wfg-server` main `907bd42`)과 대조해 고쳤습�
 | 2026-11-24 | v0.5 보완 | 예측 · 제안서 두 묶음 — PRED-01은 예측 · 위험도 · 단계까지, 제안서는 proposal_operation_id 작업. PROP-05를 제안서 없는 예측에도 허용(시연 QA 3-5) |
 | 2026-11-24 | v0.5 보완 | RISK-01 — 7일 강수 · 기압 · 지면온도(예측할 때 ASOS 관측)를 연결해 변수 25개 가운데 24개(수분함량은 아직). 응답 모양은 그대로(시연 QA 3-11) |
 | 2026-11-24 | v0.5 보완 | RISK-01 — 수분함량(ELMFIRE가 쓴 1시간 연료 수분)을 연결해 변수 25개 모두. 응답 모양은 그대로(시연 QA 3-11) |
+| 2026-11-25 | v0.5 보완 | 행정리 — AdminVillage DTO, 레이어 admin_villages, MAP-02·03에 admin_village 추가. 서버에 이미 있던 응답을 적은 것 |
 
 요청·응답 타입과 미결 항목을 팀에서 검토한 후 main에 병합합니다. v0.5는 docs/api-spec-v0.5 작업 브랜치에서 검토하며 다른 설계 파일은 수정하지 않습니다. 이후 API 계약을 바꾸면 관련 DTO·프론트 타입·목업 응답·서버 OpenAPI도 같은 변경에 맞춰 관리합니다.
 

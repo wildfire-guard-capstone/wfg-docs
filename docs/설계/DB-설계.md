@@ -4,7 +4,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 
 | 항목 | 내용 |
 |---|---|
-| 최종 갱신 | 2026-11-09 |
+| 최종 갱신 | 2026-11-25 |
 | 기준 | 수정 요구사항 분석서(F-01~F-32), 수정 프로토타입 보고서(49쪽 MVP 7개), 회의 결정(10/10~10/16) |
 | 관련 문서 | [`데이터-자원.md`](데이터-자원.md) |
 | 이전 판 | 설계 원칙·데이터 추출·테이블 후보 32개·계정 묶음 컬럼을 정리했던 이전 판은 Git 이력(PR #21~#28)에 있음 |
@@ -710,13 +710,14 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 
 ### 2.6 지도·자원
 
-지도에 그리고 규칙 엔진이 판정에 쓰는 **바뀌지 않는 바탕 데이터**와, 전산 관리자가 관리하는 **진화자원**이다. **범위는 의성 + 의성 경계에서 10 km 안**이다(11/8) — 핵심은 의성이고, 8시간 확산 예측이 경계를 조금 넘을 때를 위해 인근은 경계 10 km 안의 리 · 읍면 · 경찰 관서 · 나들목만 둔다(전국은 시도 · 시군구 경계만). 바탕 데이터는 공유 데이터 폴더 `data/지도자원/적재/`의 파일(테이블 1개 = 파일 1개)을 한 번 넣고, 다시 만들 때만 통째로 바꾼다. 넣는 방법: `wfg-server`의 `python -m app.db.seed.base --data-dir <적재 폴더> --yes` — 바탕 데이터 6개 테이블을 비우고 적재 파일에서 다시 넣는다(한 트랜잭션, 11/6). 출처·기준일은 [`데이터-자원.md`](데이터-자원.md)와 `data/지도자원/README.md`에 두고 DB에는 넣지 않는다.
+지도에 그리고 규칙 엔진이 판정에 쓰는 **바뀌지 않는 바탕 데이터**와, 전산 관리자가 관리하는 **진화자원**이다. **범위는 의성 + 의성 경계에서 10 km 안**이다(11/8) — 핵심은 의성이고, 8시간 확산 예측이 경계를 조금 넘을 때를 위해 인근은 경계 10 km 안의 리 · 읍면 · 경찰 관서 · 나들목만 둔다(전국은 시도 · 시군구 경계만). 바탕 데이터는 공유 데이터 폴더 `data/지도자원/적재/`의 파일(테이블 1개 = 파일 1개)을 한 번 넣고, 다시 만들 때만 통째로 바꾼다. 넣는 방법: `wfg-server`의 `python -m app.db.seed.base --data-dir <적재 폴더> --yes` — 바탕 데이터 7개 테이블을 비우고 적재 파일에서 다시 넣는다(한 트랜잭션, 11/6. 행정리 추가 11/19). 행정리만 다시 넣을 때는 `--admin-villages-only --yes`. 출처·기준일은 [`데이터-자원.md`](데이터-자원.md)와 `data/지도자원/README.md`에 두고 DB에는 넣지 않는다.
 
 | 테이블 | 1행 = | 의성 행 수 | 적재 파일 |
 |---|---|---|---|
 | `admin_areas` | 시도·시군구·읍면동 1개 | 307: 시도 17 · 시군구 229(전국) + 읍면 61(의성 18 + 인근 43) | `admin_areas.geojson` — 전국 시도·시군구는 `build_admin_national.py`(SGIS 경계 + 행안부 법정동코드, 일반구는 시로 합침, 11/6), 인근 읍면은 `build_nearby.py`(11/8) |
 | `villages` | 마을(법정리) 1개 | 550: 의성 182 + 인근 368(10 km 안, 9개 시군구) | `villages.geojson` — 인근 리는 `build_nearby.py`(11/8) |
-| `facilities` | 시설 1개(한 건물·한 구역 = 1행) | 251(경찰 12 → 43, 11/8) | `facilities.csv` |
+| `admin_villages` | 행정리 1개 | 399: 의성 182 법정리 전부(인근 리는 없음) | `admin_villages.geojson`(11/25) |
+| `facilities` | 시설 1개(한 건물·한 구역 = 1행) | 240(경찰 12 → 43, 11/8 · 모텔 대피소 11곳 삭제, 11/25) | `facilities.csv` |
 | `map_features` | 도로·송전·담수지·주택·집계구·나들목 선·면·점 1개 | 28,862 | `map_features.geojson` — `build_map_features.py`가 의성 레이어 · OSM 원본에서 만듦(11/7), 나들목은 `build_nearby.py`(11/8) |
 | `resource_bases` | 진화자원 기지 1곳 | 51 (시연): 산림항공관리소 3 · 지자체 임차 5 · 경북 119 항공대 1 · 의성 소방 9 · 인근 시군 소방 32 · 의성군 진화대 1 | `resource_bases.csv` |
 | `resources` | 진화자원(헬기·차량) 1대 | 162 (시연): 헬기 20 + 차량 142 | `resources.csv` |
@@ -765,6 +766,29 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 - 면적은 저장하지 않고 `ST_Area`로 계산한다
 - 집계구 경계·인구는 별도 테이블 없이 `map_features`(`census_block`)에 **보관만** 한다(11/7). 규칙 엔진은 쓰지 않고 마을 추정값(`pop65_est` 등)을 쓴다. 지도 레이어 · 위험도의 「취약계층 수」 계산 후보
 
+#### `admin_villages` — 행정리 (2026-11-19 추가, 11/25 다시 적재)
+
+**어떤 테이블**: 행정리(이장 단위) 1개 = 1행. 법정리(`villages`) 아래에 두며, 의성군 399곳만 있다. 지도에 행정리 아이콘과 이름을 그리고, 규칙 엔진이 마을을 행정리로 나눠 부르거나 E4 거리의 출발점을 잡을 때 쓴다.
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| `id` | bigint | PK | |
+| `village_id` | bigint | NN, FK → `villages` | 속한 법정리 |
+| `name` | varchar(50) | NN, UK(`village_id`, `name`) | 행정리 이름. 예: 괴산1리 |
+| `seq` | smallint | NN | 조례 별표 순서(1리 · 2리 …) |
+| `hall_name` | varchar(100) | | 좌표를 얻은 회관 이름. 회관을 확인하지 못했거나 나뉘지 않은 법정리는 `○○리마을회관`으로 채움 |
+| `hall_point` | geometry(Point, 5179) | | **행정리 좌표**(마을회관 · 경로당 등의 자리). 지도 아이콘 위치 |
+| `hall_source` | varchar(200) | | 좌표 출처 |
+| `geom` | geometry(MultiPolygon, 5179) | | **행정리 구역**. 집 위치로 추정한 범위이며 공식 경계가 아님 |
+| `houses_est` | int | | 구역으로 묶은 주택 동수 |
+| `attrs` | jsonb | NN, 기본 `{}` | 구역을 만든 방법 · 면적 · 확인 메모. 모든 행: `area_ha` · `share_of_beop` · `parts` · `hall_to_center_m` · `hall_weight` · `method`. 있는 행만: `hall_check`(62) · `shared_with`(2) · `hall_outside_beop`(1) |
+
+- 이름은 「의성군 이장 정수 조례」 별표(2024-12-31)에서 왔다. 조례에 행정리 경계가 없어 **구역은 추정**이다: 행정리 좌표에서 시작하는 K-평균으로 법정리 안 주택을 나누고, 집 둘레 30 m를 합쳐 60 m 안의 틈을 메운 모양(우리가 정한 값, 근거 등급 D)
+- 지금은 399곳 모두 좌표와 구역이 있다(11/19 적재는 좌표 52 · 구역 30). 컬럼은 NULL을 허용한다
+- `hall_point`와 `geom`에 공간 색인(GiST)이 있다. 이 테이블을 가리키는 테이블이 없어 이 테이블만 비우고 다시 넣을 수 있다
+- 행정리별 인구와 대피 상태는 없다. 법정리(`villages.population`, `incidents.situation.villages`)를 쓴다
+- 청로1리 · 2리는 같은 회관을 써서 좌표 · 구역이 같다(`houses_est` 합계에 135동이 겹쳐 들어감). 사촌1리는 좌표가 이웃 법정리 땅에 있다
+
 #### `facilities` — 주요 시설
 
 **어떤 테이블**: 지도에 표시하고 제안에 이름이 나오는 **시설 1개 = 1행**. 종류는 `type` 하나로 나누고, 종류마다 다른 값은 `attrs`에 둔다. 한 건물이 두 역할을 하면 1행에 표시만 더한다(예: 응급실이 있는 요양병원 = `VULNERABLE` + `attrs.emergency = true`).
@@ -781,18 +805,19 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | `phone` | varchar(20) | | 대표 전화 |
 | `village_id` | bigint | FK → `villages` | 시설이 있는 마을. **관할 밖 시설(인접 소방서·안동 병원)은 NULL** |
 | `sigungu_id` | bigint | NN, FK → `admin_areas` | 시설이 있는 **시군구**. 적재할 때 위치로 한 번 계산(`ST_Contains`). 리가 없는 관할 밖 시설도 시군구는 있어서, 시군구 단위로 거를 때 쓴다 |
-| `geom` | geometry(Geometry, 5179) | NN | 위치·모양. 건물 하나(소방서·경찰·대피소 등)는 점, 넓은 시설(국가유산 지정구역·사찰 경내 등)은 면도 넣을 수 있다. 지금 220곳은 모두 점 |
+| `geom` | geometry(Geometry, 5179) | NN | 위치·모양. 건물 하나(소방서·경찰·대피소 등)는 점, 넓은 시설(국가유산 지정구역·사찰 경내 등)은 면도 넣을 수 있다. 지금 240곳은 모두 점 |
 | `attrs` | jsonb | NN, 기본 `{}` | 종류별 값(아래) |
 
 | `type` | 무엇 | 의성 행 수 | `attrs` | 쓰는 제안 |
 |---|---|---|---|---|
-| `SHELTER` | 대피소 | 84 | `designated`(이재민 임시주거시설 지정) · `used_2025`(2025 산불 때 실제 안내) · `area_m2` · `evac_area_2025`(2025 대피 대상 마을) · `tier`(E4. 적재 때 채움: 경로당 = `village`(마을 시설), 그 밖 = `hub`(거점 시설), 숙박시설(모텔) = 없음 → 후보 제외) | E4 · E2 · E6 |
+| `SHELTER` | 대피소 | 73: 경로당 31 · 학교 18 · 공공·문화 11 · 복지·체육 8 · 휴양마을 3 · 면사무소 2 | `designated`(이재민 임시주거시설 지정) · `used_2025`(2025 산불 때 실제 안내) · `area_m2` · `evac_area_2025`(2025 대피 대상 마을) · `tier`(E4. 적재 때 채움: 경로당 = `village`(마을 시설), 그 밖 = `hub`(거점 시설)) | E4 · E2 · E6 |
 | `VULNERABLE` | 취약시설(요양원·주야간보호·요양병원·장애인 거주시설 등) | 34 | `occupancy`(현원) · `daytime_only`(주야간보호) · `emergency`(응급실 있음) | S2 · E1 · E3 |
 | `HOSPITAL` | 응급 이송처(관할 밖 응급실 병원) | 3 | `emergency` | E3 |
 | `FIRE_STATION` | 소방서 · 119안전센터 · 119지역대 | 41 | `center`(지역대가 속한 안전센터) | S6 · E7 · 위험도(소방서 거리) |
 | `POLICE` | 경찰 관서. `subtype` = **경찰서 · 지구대 · 파출소**(치안센터는 파출소로, 11/8) — 이름으로 나눔 | 43: 의성 12 + 의성 밖 10 km 안 31(OSM). 경찰서는 의성 · 안동 · 군위 | `nearby`(의성 밖 10 km 안) · `osm` | S6 · E5 · E7 — 요청 대상은 **경찰서**만 |
 | `HERITAGE` | 국가유산 | 46 | — | S2 · S5 |
 
+- **모텔(숙박시설)은 대피소로 보지 않아 넣지 않는다**(11/25). 11/4에는 후보에서만 뺐고(`tier` 없음), 11/25에 11곳을 DB와 적재 파일에서 지웠다(84 → 73)
 - 응급 이송처 = `attrs.emergency = true`인 행(관할 안 병원 2 + 안동 3 = 5곳). 별도 테이블을 두지 않는다
 - 출처 칸은 두지 않는다(출처는 데이터 자원 문서). 좌표를 주소로 조회했는지 같은 수집 메모도 DB에 넣지 않는다
 - **모양을 점으로 한정하지 않는 이유**: 판정은 `ST_Intersects`(P5·P8 안에 드는지)와 `ST_Distance`·`<->`(가장 가까운 곳)로 하는데, 이 함수들은 점·선·면 모두 같게 동작한다. 넓은 시설을 점으로 두면 P5가 가장자리만 걸칠 때 놓치므로, 면이 있으면 면으로 넣는다. 거리는 면이면 가장 가까운 경계까지다. 지도 아이콘은 `ST_PointOnSurface(geom)` 위치에 그린다
@@ -926,7 +951,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 
 **데이터가 쌓이는 방식**
 
-- `admin_areas`·`villages`·`facilities`·`map_features`: 적재 파일을 한 번 넣는다(좌표는 4326 → 5179로 변환). 데이터를 다시 만들면 통째로 바꾼다. 서비스 중에는 바뀌지 않는다
+- `admin_areas`·`villages`·`admin_villages`·`facilities`·`map_features`: 적재 파일을 한 번 넣는다(좌표는 4326 → 5179로 변환). 데이터를 다시 만들면 통째로 바꾼다. 서비스 중에는 바뀌지 않는다
   - 다만 `villages.id`·`facilities.id`는 `incidents.situation`·`proposal_items.detail`이 가리키므로, 다시 넣을 때 **`code`(마을)·이름+위치(시설)로 기존 id를 유지**한다
 - `resource_bases`·`resources`: 시연값을 한 번 넣고, 이후 전산 관리자가 화면에서 등록·수정·삭제한다
 
@@ -934,17 +959,17 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 
 | 기능 | 사용 |
 |---|---|
-| F-05·F-06 지도 | 읍면 경계, 마을 경계·이름, 시설 점, 도로·송전·담수지 레이어 |
+| F-05·F-06 지도 | 법정리 경계(노란 선)·이름, 행정리 아이콘·이름(`admin_villages.hall_point`·`name`), 시설 점, 도로·송전·담수지 레이어. 읍면·시군구 경계는 그리지 않음(11/25) |
 | F-07 주요 시설 | `facilities`를 종류별로 표시·조회 |
 | F-08 진화자원 가용 현황 | `resources`를 기지·종류·상태별로 집계 |
 | F-31 진화자원 관리 | `resources`·`resource_bases` INSERT·UPDATE·DELETE |
 | F-01 권한 | `users.admin_area_id` → 관할 시군구 |
 | F-02 산불 보고 | 발화 지점 → `incidents.admin_area_id`(읍면동) |
 | E1 위험구역 | P5·P8과 `villages.geom`이 겹치는지 + 겹친 비율 |
-| E2 대피 순서 | `villages.population`·`pop65_est` |
+| E2 대피 순서 | `villages.population`·`pop65_est`. 행정리가 둘 이상인 리는 구역(`admin_villages.geom`)에 처음 닿는 P로 나눠 봄 |
 | S1 대응단계 ④ 시설피해 | **피해 우려** = P5 안에 든 `map_features`(`house`) 점 수 + `HERITAGE` 수(「주택·국가유산 등 주요시설 20동」, p.73·p.80, 시행령 [별표 3] 비고 4). 현재 · 예측 단계 모두 이 값으로 판정. 현재 화선 안 동수는 **피해 발생**으로 따로 셈 |
 | E3 취약시설 | P5·P8 안 `VULNERABLE`, 가까운 응급 이송처(`attrs.emergency`) |
-| E4 대피소 | 대피할 마을마다 `SHELTER`를 **마을 시설**(경로당)과 **거점 시설**(학교·체육관·공공·복지·휴양마을·면사무소)로 나눠 종류마다 **직선거리로 가까운 2곳**. 리·읍면·시군 경계로 자르지 않음(11/4). 대피소 자기 위치로 판정(P0~P5 안 제외 · P6~P8 안 원칙 제외 · P8 밖 안전), `capacity`. 모텔은 후보에서 뺌 |
+| E4 대피소 | 대피할 마을마다 `SHELTER`를 **마을 시설**(경로당)과 **거점 시설**(학교·체육관·공공·복지·휴양마을·면사무소)로 나눠 종류마다 **직선거리로 가까운 2곳**. 리·읍면·시군 경계로 자르지 않음(11/4). 대피소 자기 위치로 판정(P0~P5 안 제외 · P6~P8 안 원칙 제외 · P8 밖 안전), `capacity`. 거리는 가장 먼저 닿는 행정리의 좌표(`admin_villages.hall_point`)에서 재고, 구역에 닿는 행정리가 없으면 주택 밀집 지점에서 잼 |
 | E5 도로 통제 | P0~P5와 겹치는 `road`를 노선 번호(없으면 도로명)로 묶은 구간(양 끝 마을) · 닿는 시각 · 범위 안 길이, 가까운 경찰서(`POLICE` 중 경찰서만) |
 | E6 재난문자 | 대상 마을의 읍면·리 이름 |
 | E7 구조 요청 | 이미 닿은 마을 중 대피 완료 보고가 없는 곳(`incidents.situation.villages`), 가까운 `FIRE_STATION` 중 **소방서**(119안전센터·지역대 제외, 11/5) |
@@ -979,9 +1004,9 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | F-02 | 산불 상황 보고 | `incidents`, `fire_perimeters`, `admin_areas`, `intake_records` | ✅ | 발화 지점 → 읍면동 자동. 화선 v1… 정정은 새 번호. 기관별 접수 기록은 `intake_records`(1.3의 3번, 11/23 포함) |
 | F-03 | 발화 종료 | `incidents` | ✅ | `status`·`ended_at`·`ended_by`. 이후 보고·예측·정정 차단 기준 |
 | F-04 | 산불 발생·접수 정보 | `incidents`, `fire_perimeters`, `predictions`, `admin_areas` | ✅ | 산불 이름 = 읍면동 + 시군구 이름 |
-| F-05 | 통합 상황도 | `incidents`, `fire_perimeters`, `prediction_slices`, `villages`, `facilities` | ✅ | P1~P8 시간 재생 = `base_at` + `hour` |
-| F-06 | 지도 레이어 선택 | `villages`(인구), `facilities`, `map_features`, `admin_areas` | ✅ | |
-| F-07 | 주요 시설 표시 | `villages`, `facilities`, `map_features`(담수지) | ✅ | |
+| F-05 | 통합 상황도 | `incidents`, `fire_perimeters`, `prediction_slices`, `villages`, `admin_villages`, `facilities` | ✅ | P1~P8 시간 재생 = `base_at` + `hour` |
+| F-06 | 지도 레이어 선택 | `villages`, `admin_villages`(행정리), `facilities`, `map_features` | ✅ | |
+| F-07 | 주요 시설 표시 | `villages`, `admin_villages`, `facilities`, `map_features`(담수지) | ✅ | |
 | F-08 | 가용 현황 | `resources`, `resource_bases`, `incidents.situation.deployed` | ⚠️ | 헬기·차량은 기지별 상태로 됨. **인력은 개별 자원이 없음**(1.4 진화대 제외) → 산불별 투입 수만 |
 | F-09 | 확산 예측 실행 | `predictions`, `prediction_slices`, `fire_perimeters` | ✅ | 예측을 먼저 저장, 제안서는 따로(11/24) |
 | F-10 | 산불 위험도 조회 | — | ❌ | **위험도 결과(R·등급·요인별 기여)를 담을 곳이 없음**. 4.2의 1번 |
@@ -999,7 +1024,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | F-22 | E1 위험구역 | `villages`, `prediction_slices` | ✅ | P5·P8과 겹친 비율 |
 | F-23 | E2 대피 대상·순서·시점 | `villages`(인구·65세 이상), `prediction_slices`, `incidents.situation` | ✅ | 위험도는 같은 트랜잭션에서 계산한 값을 씀(4.2의 1번과 연결) |
 | F-24 | E3 취약시설·미대피 | `facilities`(취약시설·응급 이송처), `incidents.situation.villages` | ✅ | |
-| F-25 | E4 대피소 배정 | `facilities`(대피소), `villages` | ✅ | 직선거리 |
+| F-25 | E4 대피소 배정 | `facilities`(대피소), `villages`, `admin_villages` | ✅ | 직선거리 |
 | F-26 | E5 대피 경로·교통통제 | `map_features`(도로), `facilities`(경찰) | ⚠️ | **진화차량 진입로·지정 대피로 데이터 없음** → 통제 구간(P0~P5) + 가까운 경찰서까지, 요청 대상은 LLM(2.6 `map_features`) |
 | F-27 | E6 재난문자·방송 | `villages`, `admin_areas`, `incidents.situation` | ✅ | 송출 여부는 `situation.disaster_sms_sent` |
 | F-28 | E7 인명구조 | `incidents.situation.villages`, `facilities`(소방서) | ✅ | |
