@@ -378,7 +378,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 **데이터가 쌓이는 방식**
 
 - 예측 성공 → `predictions` 1행 + `prediction_slices` 8행을 **추가만** 한다. 고치거나 지우지 않는다
-- 예측 → P1~P8 → 위험도 → 제안서 계산을 모두 마친 뒤 **한 트랜잭션**으로 저장한다(계산하는 몇 분 동안 트랜잭션을 열어 두지 않음). 중간에 실패하면 아무것도 남지 않아 직전 예측·제안서가 그대로 현재가 된다(UC-PRED-01 예외 흐름 E2·E3)
+- **두 번에 나눠 저장한다(11/24)**: ① 예측 → P1~P8 → 위험도 계산 → 대응단계 판정(`incidents.current_stage`)을 한 트랜잭션으로 ② 이어서 제안서를 따로. ①이 실패하면 아무것도 남지 않아 직전 예측·제안서가 그대로 최신이고, ②가 실패하면 예측은 남고 제안서만 다시 만든다(`PROPOSAL_FAILED`)
 - 중복 실행은 버튼 비활성화와 서버의 산불별 잠금(PostgreSQL advisory lock)으로 막는다. 실행 중에 다시 요청하면 「이미 실행 중」을 돌려준다(E1)
 - 종료된 산불(`incidents.status = ENDED`)은 예측하지 않는다
 - 1시간마다 다시 예측하면 8시간에 약 8회 → `predictions` 약 8행, `prediction_slices` 약 64행
@@ -571,7 +571,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 
 **데이터가 쌓이는 방식**
 
-- 예측 → P1~P8 → (위험도) → 제안서 계산을 모두 마친 뒤, `proposals` 1행 + `proposal_items` 최대 12행을 예측과 **한 트랜잭션**으로 저장한다. 실패하면 아무것도 남지 않는다(UC-PRED-01 E3)
+- 예측을 먼저 저장하고(2.3), 제안서 계산을 마친 뒤 `proposals` 1행 + `proposal_items` 최대 12행을 한 트랜잭션으로 저장한다(11/24). 실패하면 제안서만 남지 않고 예측은 유지된다 — UC-PRED-01 E3(함께 버림)에서 바뀜
 - 상황 정정 확인 → 같은 `prediction_id`로 `proposals` 1행(`CORRECTION`, `seq` + 1)과 항목을 새로 저장
 - 저장하면 `event_logs`에 `PROPOSAL_CREATED`(버전·계기·변경 항목 수)
 - 고치거나 지우지 않는다. 종료된 산불은 새 버전을 만들지 않고, 마지막 버전을 조회만 한다
@@ -982,7 +982,7 @@ MVP 기능이 동작하는 데 **꼭 필요한 것만** 담은 DB 설계입니�
 | F-06 | 지도 레이어 선택 | `villages`(인구), `facilities`, `map_features`, `admin_areas` | ✅ | |
 | F-07 | 주요 시설 표시 | `villages`, `facilities`, `map_features`(담수지) | ✅ | |
 | F-08 | 가용 현황 | `resources`, `resource_bases`, `incidents.situation.deployed` | ⚠️ | 헬기·차량은 기지별 상태로 됨. **인력은 개별 자원이 없음**(1.4 진화대 제외) → 산불별 투입 수만 |
-| F-09 | 확산 예측 실행 | `predictions`, `prediction_slices`, `fire_perimeters` | ✅ | 한 트랜잭션으로 예측 → 제안서까지 |
+| F-09 | 확산 예측 실행 | `predictions`, `prediction_slices`, `fire_perimeters` | ✅ | 예측을 먼저 저장, 제안서는 따로(11/24) |
 | F-10 | 산불 위험도 조회 | — | ❌ | **위험도 결과(R·등급·요인별 기여)를 담을 곳이 없음**. 4.2의 1번 |
 | F-11 | 대응 제안 생성·상세 | `proposals`, `proposal_items` | ✅ | 화면은 `sections` · `evidence`, 판정은 `detail`(11/9) |
 | F-12 | 제안 분류 | `proposal_items.axis`·`categories` | ✅ | |

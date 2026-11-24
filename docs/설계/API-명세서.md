@@ -492,7 +492,7 @@ DB의 영문 ENUM과 규칙 엔진·LLM의 한글 표시는 구분합니다. 제
 | reporter_org | string 또는 null | 필수·null 허용 | 최대 100자, 신고 기관명. 기관별 접수 목록 아님 — 그것은 아래 `intake_records`(11/23) |
 | reporter_name / reporter_phone | string 또는 null | 필수·null 허용 | DB 저장은 성명 50자·연락처 20자 필수, 미상 허용. 역할별 응답 마스킹 정책은 Q-08 |
 | status | IncidentStatus | 필수 | 진행/종료 |
-| current_stage | ResponseStage | 필수 | **예측할 때 판정**한 값(PRED-01 성공 시 그 제안서의 judged_stage로 갱신). 화선 보고·정정 때는 판정하지 않으며 첫 예측 전에는 INITIAL. 사용자 입력 금지 (v0.5) |
+| current_stage | ResponseStage | 필수 | **예측할 때 판정**한 값(PRED-01 예측을 저장할 때 규칙 엔진 판정으로 갱신 — 제안서를 기다리지 않음, 11/24). 화선 보고·정정 때는 판정하지 않으며 첫 예측 전에는 INITIAL. 사용자 입력 금지 (v0.5) |
 | situation | Situation | 필수 | 현재 승인된 상황 |
 | reported_by / created_at | ID / DateTime | 필수 | 최초 등록 계정 / 등록시각 |
 | ended_at / ended_by | DateTime 또는 null / ID 또는 null | 필수·null 허용 | 종료 정보 |
@@ -501,7 +501,7 @@ DB의 영문 ENUM과 규칙 엔진·LLM의 한글 표시는 구분합니다. 제
 | needs_reprediction | boolean | 필수 | 최신 화선 버전 > 현재 예측 기준 화선 버전. 예측이 없으면 true |
 | proposal_stale | boolean | 필수 | 정정은 저장됐지만 현재 제안서가 이를 반영하지 못함 |
 | situation_revision | string | 필수 | 동시 수정 방지용 불투명 API 토큰 제안. DB 컬럼 추가 확정 아님. v0.5 서버는 `rev-{최신 정정 id}` 임시 값 — 상황 정정(COR-01) 결정 때 확정(확인 필요) |
-| running_operation_id | string 또는 null | 필수·null 허용 | 진행 중인 예측 작업 id(PRED-05로 조회). 없으면 null. 화면을 다시 열어도 진행 표시를 이어 감 (v0.5) |
+| running_operation_id | string 또는 null | 필수·null 허용 | 진행 중인 예측 · 제안서 만들기 작업 id(PRED-05로 조회, kind로 구분 11/24). 없으면 null. 화면을 다시 열어도 진행 표시를 이어 감 (v0.5) |
 | intake_records | object[] | 필수 | **기관별 접수 기록(11/23)**. 각 줄 `id`(ID) · `org_name`(string, 최대 100자, 접수 기관) · `received_at`(DateTime, 접수 시각) · `channel`(string 최대 30자 또는 null, 접수 경로). 접수 시각 순(같으면 입력 순), 없으면 빈 배열. INC-02 때만 받고 고치는 API는 없음 |
 
 조회 참조들은 일관된 스냅샷으로 읽습니다. REPORTER에는 situation·예측·제안 참조 등 분석용 필드를 제외하고 보고 정보와 화선만 제공하는 안이며, 권한 범위는 Q-08에서 확정합니다.
@@ -795,11 +795,11 @@ predictions에는 성공 결과만 저장합니다. 진행·실패 상태는 Ope
 | 필드 | 타입 | 필수·null | 설명 |
 | --- | --- | --- | --- |
 | id | string | 필수 | 불투명 작업 ID |
-| kind | PREDICTION / PROPOSAL_REGENERATION | 필수 | 장시간 작업 종류 |
+| kind | PREDICTION / PROPOSAL_REGENERATION | 필수 | 장시간 작업 종류. PROPOSAL_REGENERATION = 제안서 만들기(예측 뒤 첫 생성 · 정정 뒤 · 다시 생성, 11/24) |
 | status | OperationStatus | 필수 | QUEUED / RUNNING / SUCCEEDED / FAILED |
 | stage | string 또는 null | 필수·null 허용 | SPREAD / RISK / RULES / PROPOSAL_GENERATION / COMMIT. v0.5 서버는 EVIDENCE를 내지 않음(근거 검색이 PROPOSAL_GENERATION 안에서 같이 돎) |
-| result | object 또는 null | 필수·null 허용 | 성공 때 prediction_id·proposal_id 반환. 정정 관련 작업은 correction_id도 가능. 예측 작업(PREDICTION)은 mode(요청한 PredictionMode, null = 서버 기본)·predictor(실제로 쓴 예측 synthetic·file·elmfire)도 반환 (v0.5 보완) |
-| error | object 또는 null | 필수·null 허용 | 실패 때 code·message. HTTP 오류와 같은 코드 체계. v0.5 서버 코드: 커밋 직전 재검사 `STALE_PERIMETER`·`INCIDENT_ENDED`, 계산 실패 `PREDICTION_INVALID`(예측 결과 검사 실패)·`PROPOSAL_FAILED`(규칙·제안 단계)·`INTERNAL_ERROR` (v0.5 보완: 서버 코드대로 확정) |
+| result | object 또는 null | 필수·null 허용 | 예측 작업(PREDICTION)은 prediction_id와 이어서 도는 제안서 작업 proposal_operation_id(11/24), 제안서 작업은 proposal_id·prediction_id·correction_id(예측 뒤 생성이면 null) 반환. 예측 작업은 mode(요청한 PredictionMode, null = 서버 기본)·predictor(실제로 쓴 예측 synthetic·file·elmfire)도 반환 (v0.5 보완) |
+| error | object 또는 null | 필수·null 허용 | 실패 때 code·message. HTTP 오류와 같은 코드 체계. v0.5 서버 코드: 커밋 직전 재검사 `STALE_PERIMETER`·`INCIDENT_ENDED`, 계산 실패 `PREDICTION_INVALID`(예측 결과 검사 실패)·`INTERNAL_ERROR`, 제안서 작업은 `PROPOSAL_FAILED`·`STALE_PREDICTION`·`STALE_SITUATION`·`INCIDENT_ENDED`(11/24) (v0.5 보완: 서버 코드대로 확정) |
 
 작업 큐·보존기간·재시작 후 복구는 Q-05에서 확정해야 합니다. 서버 구현 없이 메모리 작업만으로 운영 계약이 충족됐다고 보지 않습니다.
 
@@ -2650,7 +2650,7 @@ expected_perimeter_id: ID 필수, mode: PredictionMode 또는 null 선택(v0.5 �
 }
 ```
 
-**처리 규칙:** **v0.5 보완 — mode**: 예측마다 고르며 서버 기본값을 바꾸지 않습니다. 고른 mode와 실제로 쓴 예측은 PRED-05 result.mode·predictor와 이벤트 로그에 남고 DB 칸은 없습니다(PRED-02에는 없음). LIVE는 관측소가 3곳 미만이면(기상청 응답 없음 포함), DEMO_ELMFIRE는 화선 시각이 덱 기상(2025-03-22)에 없으면 503 WEATHER_UNAVAILABLE입니다. 최신 유효 화선만 대상으로 하며 과거 화선 지정 실행은 허용하지 않습니다. 서버가 기상 지점을 선택하고 base_at=observed_at으로 고정합니다. **v0.5: 기상은 요청 때 먼저 받습니다**(서버 설정의 원천에서 9시간). 못 받으면 작업을 만들지 않고 503 WEATHER_UNAVAILABLE이며, 받은 기상은 예측에 넘기고 predictions.weather로 저장해 규칙·제안도 같은 값을 씁니다. **ELMFIRE 예측(v0.5 보완)**도 요청 때 기상 입력(관측소 격자 — 실시간 또는 시연)을 만들고, 남은 관측소가 3곳 미만이거나 시연 기상에 없는 시각이면 같은 503입니다(다른 기상으로 대신하지 않음). 이때 predictions.weather = 그 격자의 발화점 칸 9시간. 예측→P1~P8→위험도→규칙→근거→제안 계산 후 최종 결과를 한 트랜잭션으로 저장합니다. 실패 시 직전 예측·제안이 유지됩니다. 계산 중 새 화선·정정 발생 시 오래된 결과를 최신으로 커밋하지 않도록 재검사합니다. **v0.5 결정(Q-01 일부)**: 위험도를 못 구해도 예측·제안은 저장합니다(RISK-01만 data: null). 근거 검색은 제안 작성(PROPOSAL_GENERATION) 안에서 함께 합니다. 작업 저장소는 Q-05에서 확정합니다(v0.5 서버는 메모리).
+**처리 규칙:** **v0.5 보완 — mode**: 예측마다 고르며 서버 기본값을 바꾸지 않습니다. 고른 mode와 실제로 쓴 예측은 PRED-05 result.mode·predictor와 이벤트 로그에 남고 DB 칸은 없습니다(PRED-02에는 없음). LIVE는 관측소가 3곳 미만이면(기상청 응답 없음 포함), DEMO_ELMFIRE는 화선 시각이 덱 기상(2025-03-22)에 없으면 503 WEATHER_UNAVAILABLE입니다. 최신 유효 화선만 대상으로 하며 과거 화선 지정 실행은 허용하지 않습니다. 서버가 기상 지점을 선택하고 base_at=observed_at으로 고정합니다. **v0.5: 기상은 요청 때 먼저 받습니다**(서버 설정의 원천에서 9시간). 못 받으면 작업을 만들지 않고 503 WEATHER_UNAVAILABLE이며, 받은 기상은 예측에 넘기고 predictions.weather로 저장해 규칙·제안도 같은 값을 씁니다. **ELMFIRE 예측(v0.5 보완)**도 요청 때 기상 입력(관측소 격자 — 실시간 또는 시연)을 만들고, 남은 관측소가 3곳 미만이거나 시연 기상에 없는 시각이면 같은 503입니다(다른 기상으로 대신하지 않음). 이때 predictions.weather = 그 격자의 발화점 칸 9시간. **두 묶음(11/24)**: ① 예측→P1~P8→위험도→대응단계 판정을 저장하면 이 작업은 SUCCEEDED로 끝나 화면이 지도·위험도·단계를 바로 보입니다(저장 직전 새 화선·종료 재검사, 실패 시 직전 예측·제안 유지). ② 이어서 제안서를 result.proposal_operation_id 작업(PROPOSAL_REGENERATION)으로 만듭니다. ②가 실패해도 예측은 남고 PROP-05로 다시 만듭니다. ②를 만드는 동안 새 화선이 보고돼도 그 제안서는 제 화선 버전으로 저장되고 needs_reprediction = true가 됩니다. 산불마다 작업은 하나라 ②가 도는 동안 PRED-01은 409 PREDICTION_RUNNING, INC-04는 409 RESOURCE_BUSY입니다. 규칙 엔진이 실패해도 예측은 저장하고 ②가 실패로 알립니다(단계는 그대로). **v0.5 결정(Q-01 일부)**: 위험도를 못 구해도 예측·제안은 저장합니다(RISK-01만 data: null). 근거 검색은 제안 작성(PROPOSAL_GENERATION) 안에서 함께 합니다. 작업 저장소는 Q-05에서 확정합니다(v0.5 서버는 메모리).
 
 **주요 오류:** 409 INCIDENT_ENDED / PREDICTION_RUNNING / STALE_PERIMETER, 422 VALIDATION_ERROR(모르는 mode), 503 WEATHER_UNAVAILABLE
 
@@ -3004,7 +3004,7 @@ expected_perimeter_id: ID 필수, mode: PredictionMode 또는 null 선택(v0.5 �
     "stage": "COMMIT",
     "result": {
       "prediction_id": "41",
-      "proposal_id": "52",
+      "proposal_operation_id": "op-example-2",
       "mode": "LIVE",
       "predictor": "elmfire"
     },
@@ -4328,9 +4328,9 @@ expected_prediction_id: ID, situation_revision: string 모두 필수
 }
 ```
 
-**처리 규칙:** 새 예측을 돌리지 않고 최신 성공 예측과 승인된 현재 상황으로 제안을 만듭니다. 미반영 정정이 있어야 하며 가장 최근 미반영 correction_id를 연결하는 안입니다. 여러 정정 누적 시 한 제안이 어디까지 반영했는지 판별하는 기준은 Q-06에서 확정합니다.
+**처리 규칙:** 새 예측을 돌리지 않고 최신 성공 예측과 승인된 현재 상황으로 제안을 만듭니다. **다음 중 하나일 때만**(11/24): 미반영 정정이 있거나(가장 최근 미반영 correction_id를 연결, trigger CORRECTION), 최신 예측의 제안서가 없을 때(예측 뒤 생성 실패 · 서버 재시작으로 끊김 — trigger PREDICTION, correction_id null). 제안서가 없는데 새 화선이 보고됐으면 409 STALE_PERIMETER(예측부터 다시). 둘 다 아니면 409 REGENERATION_NOT_NEEDED. 여러 정정 누적 시 한 제안이 어디까지 반영했는지 판별하는 기준은 Q-06에서 확정합니다.
 
-**주요 오류:** 409 INCIDENT_ENDED / STALE_PREDICTION / STALE_SITUATION / REGENERATION_NOT_NEEDED / OPERATION_RUNNING(이 산불 계산 중, v0.5 보완), 422 NO_PREDICTION
+**주요 오류:** 409 INCIDENT_ENDED / STALE_PREDICTION / STALE_SITUATION / STALE_PERIMETER(11/24) / REGENERATION_NOT_NEEDED / OPERATION_RUNNING(이 산불 계산 중, v0.5 보완), 422 NO_PREDICTION
 
 <a id="ai-01"></a>
 
@@ -5076,6 +5076,7 @@ R = √(H × X)                          H · X · R 모두 1~5. X가 없으면 
 | 보고·정정 | INC-02 또는 PER-02·03 → INC-03·PER-01 재조회. 새 화선이면 재예측 안내 |
 | 지도 탐색 | bbox 변경에 맞춰 MAP-02. 이전 응답이 뒤늦게 와도 현재 화면 범위를 덮어쓰지 않게 취소/요청 구분 |
 | 예측 실행 | PRED-01의 202(기상을 못 받으면 바로 503, mode는 선택 — 실서비스·시연) → PRED-05 조회(result.mode로 어떤 방식이었는지 표시) → 성공 후 INC-03 재조회 및 PRED-02·03·04, RISK-01, PROP-02를 동일 결과 ID로 연결. 산불현황 기상 칸은 WTH-01 |
+| 제안서 준비 중 · 실패(11/24) | 예측이 끝나면 지도·위험도를 먼저 보이고 proposal_operation_id를 PRED-05로 조회. 준비 중 → 끝나면 제안서만 다시 조회, 실패하면 「다시 생성」(PROP-05), 새 화선이 있으면 재예측 안내 |
 | 예측 실패 | 기존 도형·제안 유지, 작업 오류 안내. 버튼만 재활성화하고 중복 요청을 피함 |
 | 제안 필터 | PROP-02/03의 items[].axis·categories로 진화/대피 탭·구분 필터. 지도 강조(targets)는 v0.5 응답에 없음(MVP 제외) |
 | 근거·이력 | 문단의 cite를 누르면 같은 항목의 evidence[](원문 포함)에서 찾아 표시, quote로 칠함. 이력은 PROP-01 → PROP-03/04. 해당 버전의 근거·수치 표시 |
@@ -5252,6 +5253,7 @@ P1·P2 API를 서버 구현(`wfg-server` main `907bd42`)과 대조해 고쳤습�
 | 2026-11-11 | v0.5 보완 | PRED-03 Feature id = `{prediction_id}-{hour}`(서버 형식) |
 | 2026-11-12 | v0.5 보완 | 위험도 새 정의 — R = √(H × X), 변수 25개, Risk hazard · exposure · combine(wfg-server PR #46 · wfg-client PR #4) |
 | 2026-11-23 | v0.5 보완 | 기관별 접수 기록 — Incident `intake_records`, INC-02 요청에서 받아 저장(시연 QA) |
+| 2026-11-24 | v0.5 보완 | 예측 · 제안서 두 묶음 — PRED-01은 예측 · 위험도 · 단계까지, 제안서는 proposal_operation_id 작업. PROP-05를 제안서 없는 예측에도 허용(시연 QA 3-5) |
 
 요청·응답 타입과 미결 항목을 팀에서 검토한 후 main에 병합합니다. v0.5는 docs/api-spec-v0.5 작업 브랜치에서 검토하며 다른 설계 파일은 수정하지 않습니다. 이후 API 계약을 바꾸면 관련 DTO·프론트 타입·목업 응답·서버 OpenAPI도 같은 변경에 맞춰 관리합니다.
 
