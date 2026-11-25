@@ -1669,19 +1669,19 @@ current_stage·official_stage·기상·진화예상시간·부상·고립·자�
 | 필드 | 타입 | 필수·null | 설명 |
 | --- | --- | --- | --- |
 | prediction_id | ID | 필수 | 기준 예측 |
-| status | READY / PARTIAL / UNAVAILABLE | 필수 | 25개 전부 계산 / 일부 제외 / 산출 불가(위해 H를 못 구하면) |
+| status | READY / PARTIAL / UNAVAILABLE | 필수 | 22개 전부 계산 / 일부 제외 / 산출 불가(위해 H를 못 구하면) |
 | score | number 또는 null | 필수·null 허용 | R = √(hazard × exposure), 1.00~5.00. exposure가 null이면 R = hazard, 산출 불가면 null(7.2) |
 | hazard | number 또는 null | 필수·null 허용 | **v0.5 보완(11/12)** 위해 H: weather · terrain · fuel · scale 변수의 가중평균(1~5) |
 | exposure | number 또는 null | 필수·null 허용 | **v0.5 보완(11/12)** 노출 X: infrastructure · exposure 변수의 가중평균(1~5) |
 | combine | string | 필수 | **v0.5 보완(11/12)** 결합식. `sqrt_hx`(R = √(H × X)) |
 | grade | string 또는 null | 필수·null 허용 | 표시 등급 구간 미확정. 합의 전 null |
 | axes | object | 필수 | terrain·fuel·weather·infrastructure·scale·exposure 각각 number 또는 null. 축별 가용 변수의 가중평균 |
-| included_weight_sum | number | 필수 | 실제로 계산에 포함한 원가중치 합(25개 전부면 1.14) |
-| factors | RiskFactor[] | 필수 | 25개 항목 모두 반환, 미계산 항목도 사유와 함께 |
-| method_version | string 또는 null | 필수·null 허용 | 계산 기준 판. `risk-2` = 7.2의 √(H × X)(이전 `risk-1` = 23개 가중평균) |
+| included_weight_sum | number | 필수 | 실제로 계산에 포함한 원가중치 합(22개 전부면 1.08) |
+| factors | RiskFactor[] | 필수 | 22개 항목 모두 반환, 미계산 항목도 사유와 함께 |
+| method_version | string 또는 null | 필수·null 허용 | 계산 기준 판. `risk-3` = 7.2의 √(H × X), 변수 22개(이전 `risk-2` = 25개, `risk-1` = 23개 가중평균) |
 | unavailable_reasons | string[] | 필수 | 미산출·부분산출 이유 |
 
-이 예시는 산출 불가(UNAVAILABLE) 응답입니다. 실제 응답은 누락 변수를 포함한 25개를 반환합니다. 실제 점수·등급·저장 완료를 보장하는 명세가 아닙니다(Q-01).
+이 예시는 산출 불가(UNAVAILABLE) 응답입니다. 실제 응답은 누락 변수를 포함한 22개를 반환합니다. 실제 점수·등급·저장 완료를 보장하는 명세가 아닙니다(Q-01).
 
 **DTO Example**
 
@@ -5085,12 +5085,12 @@ name·organization·role·admin_area_id 중 1개 이상, 타입은 발급과 동
 
 > v0.5: v0.4의 7.2 targets → 지도 연결 · 7.3 제안 detail.facts 해석 · 7.4 E4 대피소 후보 · 7.5 E5 도로·E6 전파 구분은 삭제했습니다. 제안서 응답에 규칙 판정의 facts·targets를 넣지 않고(지도 강조는 MVP 제외), 항목도 12개(S1~S6·E1~E6)로 바뀌었습니다. 대피소 후보·도로 통제 같은 내용은 해당 항목의 sections(목록·표)에 글로 들어 있습니다.
 
-### 7.2 위험도 25개 변수
+### 7.2 위험도 22개 변수
 
 **v0.5 보완(11/12, method_version `risk-2`)**: 위험도는 위해(H)와 노출(X)을 나눠 구한 뒤 기하평균합니다. 재해 위험 = 위해 × 노출(× 취약성)이라는 표준 정의(UNDRR)를 따른 것으로, 사람 · 집이 없으면 조건이 나빠도 위험도가 낮고, 불이 커질수록 위험도가 올라가게 하기 위함입니다(근거 · 실험: wfg-server `risk/README.md`).
 
 ```text
-H(위해) = Σ(가중치 × 등급) ÷ Σ가중치   weather · terrain · fuel 21개 + scale(산불 규모) — 포함된 변수만
+H(위해) = Σ(가중치 × 등급) ÷ Σ가중치   weather · terrain · fuel 18개 + scale(산불 규모) — 포함된 변수만
 X(노출) = Σ(가중치 × 등급) ÷ Σ가중치   infrastructure 2개 + exposure(주변 주택 수) — 포함된 변수만
 R = √(H × X)                          H · X · R 모두 1~5. X가 없으면 R = H, H가 없으면 score = null
 ```
@@ -5099,15 +5099,13 @@ R = √(H × X)                          H · X · R 모두 1~5. X가 없으면 
 - 묶음 안 기여도(contribution) 합은 hazard 또는 exposure와 같습니다. 화면의 가중치는 묶음 안 비율(묶음마다 합 1)로 보입니다.
 - 노출 범위: 취약계층 수 · 주변 주택 수는 **P5 + 1 km** 안에서 셉니다. 취약계층은 리 인원 × 그 리 주택 중 범위 안 비율(주택 점이 없는 리는 겹친 면적 비율).
 - 이전 정의(`risk-1`): 23개를 한 번에 가중평균(분모 0.94). 위해 비중이 80%라 사람 · 집 유무와 불 크기가 거의 반영되지 않아 바꿨습니다.
+- **11/25(`risk-3`)**: 곡률(curvature) · 지형위치지수(topographic_position) · 지형복잡도(terrain_complexity)를 뺐습니다. 앞의 둘은 P5 평균이 늘 3 근처, 지형복잡도는 P5 평균에서 경사도와 같은 정보(순위상관 0.99)라 가중치 0.03을 slope_up에 합쳤습니다(0.08 → 0.11). 근거: 위험도-정리 「변수를 줄인 이유」.
 
 | API 변수 코드 | 원문 변수 | 축(묶음) | 원가중치 |
 | --- | --- | --- | --- |
-| slope_up | 경사도_up | terrain | 0.08 |
+| slope_up | 경사도_up | terrain | 0.11 |
 | aspect | 사면방향 | terrain | 0.06 |
-| curvature | 곡률 | terrain | 0.04 |
-| terrain_complexity | 지형복잡도 | terrain | 0.03 |
 | elevation | 고도 | terrain | 0.02 |
-| topographic_position | 지형위치지수 | terrain | 0.02 |
 | water_distance | 수계와의 거리 | terrain | 0.02 |
 | fuel_load | 산림밀도/연료량 | fuel | 0.05 |
 | forest_type | 수종종류 | fuel | 0.04 |
@@ -5128,7 +5126,7 @@ R = √(H × X)                          H · X · R 모두 1~5. X가 없으면 
 | fire_area | 산불 규모(P5 면적) | scale | 0.15 |
 | houses_nearby | 주변 주택 수(P5 + 1 km) | exposure | 0.05 |
 
-축 묶음: weather · terrain · fuel · scale → H, infrastructure · exposure → X. 위 23개는 AI Hub CSV 원가중치(합 0.94), 아래 2개는 팀 추가(11/10). 추가 변수 등급: 산불 규모 = 2 + log10(ha ÷ 10)(10 ha → 2, 100 ha → 3, 1,000 ha → 4; 산림청 대응단계 10 · 100 ha 기준), 주변 주택 수 = 1 + log10(1 + 채)(1~5로 자름).
+축 묶음: weather · terrain · fuel · scale → H, infrastructure · exposure → X. 위 20개는 AI Hub CSV 원가중치(합 0.88, slope_up은 지형복잡도 0.03 포함), 아래 2개는 팀 추가(11/10). 추가 변수 등급: 산불 규모 = 2 + log10(ha ÷ 10)(10 ha → 2, 100 ha → 3, 1,000 ha → 4; 산림청 대응단계 10 · 100 ha 기준), 주변 주택 수 = 1 + log10(1 + 채)(1~5로 자름).
 
 등급 구간은 [위험도 정리](https://github.com/wildfire-guard-capstone/wfg-docs/blob/43dc969703cdb65192e07e1341785ce38bca60c6/docs/설계/위험도-정리.md)에 적힌 원표를 기준으로 하되, 등호 경계 중복·변환식·시간/격자 기준은 Q-01에서 정해야 합니다. 미확보였던 소방서·수계 자료를 현재도 전부 없다고 단정하지 않습니다. 최신 지도·자원 문서의 확보 상태와 계산 가능 여부를 각각 확인합니다. 기압·지면온도를 관측값으로 보완할 때 예측 시점의 실제 값처럼 표시하지 않습니다.
 
@@ -5324,6 +5322,7 @@ P1·P2 API를 서버 구현(`wfg-server` main `907bd42`)과 대조해 고쳤습�
 | 2026-11-24 | v0.5 보완 | 예측 · 제안서 두 묶음 — PRED-01은 예측 · 위험도 · 단계까지, 제안서는 proposal_operation_id 작업. PROP-05를 제안서 없는 예측에도 허용(시연 QA 3-5) |
 | 2026-11-24 | v0.5 보완 | RISK-01 — 7일 강수 · 기압 · 지면온도(예측할 때 ASOS 관측)를 연결해 변수 25개 가운데 24개(수분함량은 아직). 응답 모양은 그대로(시연 QA 3-11) |
 | 2026-11-24 | v0.5 보완 | RISK-01 — 수분함량(ELMFIRE가 쓴 1시간 연료 수분)을 연결해 변수 25개 모두. 응답 모양은 그대로(시연 QA 3-11) |
+| 2026-11-25 | v0.5 보완 | 위험도 변수 25개 → 22개(`risk-3`) — 곡률 · 지형위치지수 · 지형복잡도 뺌, slope_up 0.11. 응답 모양은 그대로(factors 개수만 줄어듦) |
 | 2026-11-25 | v0.5 보완 | 행정리 — AdminVillage DTO, 레이어 admin_villages, MAP-02·03에 admin_village 추가. 서버에 이미 있던 응답을 적은 것 |
 
 요청·응답 타입과 미결 항목을 팀에서 검토한 후 main에 병합합니다. v0.5는 docs/api-spec-v0.5 작업 브랜치에서 검토하며 다른 설계 파일은 수정하지 않습니다. 이후 API 계약을 바꾸면 관련 DTO·프론트 타입·목업 응답·서버 OpenAPI도 같은 변경에 맞춰 관리합니다.
