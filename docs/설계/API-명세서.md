@@ -5103,7 +5103,7 @@ R = √(H × X)                          H · X · R 모두 1~5. X가 없으면 
 
 | API 변수 코드 | 원문 변수 | 축(묶음) | 원가중치 |
 | --- | --- | --- | --- |
-| slope_up | 경사도_up | terrain | 0.11 |
+| slope_up | 경사도(CSV 「경사도_up」, 방향 무관) | terrain | 0.11 |
 | aspect | 사면방향 | terrain | 0.06 |
 | elevation | 고도 | terrain | 0.02 |
 | water_distance | 수계와의 거리 | terrain | 0.02 |
